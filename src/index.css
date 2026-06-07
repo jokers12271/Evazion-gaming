@@ -1,0 +1,146 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap');
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Blink UI Theme CSS
+   REQUIRED for @blinkdotnew/ui components to render correctly.
+   BlinkUIProvider adds .theme-{name} + .dark/.light to <html>,
+   activating the matching CSS variable set below.
+   ───────────────────────────────────────────────────────────────────────────── */
+@import '@blinkdotnew/ui/styles';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    height: 100%;
+    scroll-behavior: smooth;
+  }
+
+  #root {
+    min-height: 100%;
+    min-height: 100vh; /* Fallback de sécurité pour l'émulation ordinateur */
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body {
+    min-height: 100%;
+    min-height: 100vh; /* Fallback de sécurité pour l'émulation ordinateur */
+    min-height: 100dvh;
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    letter-spacing: var(--tracking-normal);
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply tracking-tight font-semibold;
+  }
+}
+
+:root {
+  /* Evazion Neon Theme - Dark Mode Default */
+  --background: 240 10% 4%;
+  --foreground: 0 0% 98%;
+  --card: 240 10% 6%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 10% 6%;
+  --popover-foreground: 0 0% 98%;
+  
+  --primary: 270 90% 60%;         /* Neon Violet */
+  --primary-foreground: 0 0% 100%;
+  
+  --secondary: 180 100% 50%;      /* Neon Cyan */
+  --secondary-foreground: 240 10% 4%;
+  
+  --accent: 30 100% 50%;          /* Neon Orange */
+  --accent-foreground: 0 0% 100%;
+  
+  --muted: 240 5% 15%;
+  --muted-foreground: 240 5% 65%;
+  
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  
+  --border: 240 5% 15%;
+  --input: 240 5% 15%;
+  --ring: 270 90% 60%;
+
+  /* Sidebar */
+  --sidebar: 240 10% 3%;
+  --sidebar-foreground: 240 5% 90%;
+  --sidebar-primary: 270 90% 60%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 240 5% 10%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-border: 240 5% 10%;
+  --sidebar-ring: 270 90% 60%;
+
+  /* Typography */
+  --font-sans: 'Geist', sans-serif;
+  --font-display: 'Clash Display', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  /* Misc */
+  --radius: 0.75rem;
+  --shadow-neon-violet: 0 0 20px -5px hsl(270 90% 60% / 0.5);
+  --shadow-neon-cyan: 0 0 20px -5px hsl(180 100% 50% / 0.5);
+  --shadow-neon-orange: 0 0 20px -5px hsl(30 100% 50% / 0.5);
+}
+
+/* Specific Dark Mode overrides if needed, but we are dark-first */
+:root.dark {
+  --background: 240 10% 4%;
+  --foreground: 0 0% 98%;
+}
+
+@layer utilities {
+  .text-glow-violet {
+    text-shadow: 0 0 10px hsl(270 90% 60% / 0.5);
+  }
+  .text-glow-cyan {
+    text-shadow: 0 0 10px hsl(180 100% 50% / 0.5);
+  }
+  .bg-glow-violet {
+    box-shadow: 0 0 20px -5px hsl(270 90% 60% / 0.5);
+  }
+  .bg-glow-cyan {
+    box-shadow: 0 0 20px -5px hsl(180 100% 50% / 0.5);
+  }
+}
+
+.glass {
+  @apply bg-background/60 backdrop-blur-md border border-white/10;
+}
+
+.neon-border-violet {
+  @apply border border-primary/50 bg-glow-violet;
+}
+
+.neon-border-cyan {
+  @apply border border-secondary/50 bg-glow-cyan;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
