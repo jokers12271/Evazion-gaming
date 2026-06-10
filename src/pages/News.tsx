@@ -7,6 +7,10 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@blinkdotnew/ui'
 import { toast } from 'react-hot-toast'
+import { OnboardingModal, OnboardingStep } from '@/components/ui/OnboardingModal'
+import { Newspaper, Bell } from 'lucide-react'
+import { AdminOnboardingModal, AdminOnboardingStep } from '@/components/ui/AdminOnboardingModal'
+
 
 export function News() {
   const { news, addNews, deleteNews } = useNews()
@@ -19,6 +23,7 @@ export function News() {
   const [excerpt, setExcerpt] = useState('')
   const [category, setCategory] = useState('Salle')
   const [imageUrl, setImageUrl] = useState('')
+  const [selectedArticle, setSelectedArticle] = useState<any | null>(null) // AJOUTÉ : État de l'article en cours de lecture
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,8 +42,35 @@ export function News() {
     }
   }
 
+  const onboardingSteps: OnboardingStep[] = [
+    {
+      title: "Le Fil des Actualités",
+      desc: "Découvrez en temps réel les dernières annonces de la salle, les concours, les promos flash et les tournois organisés par Evazion.",
+      icon: <Newspaper size={28} />
+    },
+    {
+      title: "Intronisation des Champions",
+      desc: "C'est ici que sont officiellement proclamés les Joueurs du Mois et que sont affichées les affiches de victoires de l'Arène Ragnarok.",
+      icon: <Bell size={28} />
+    }
+  ]
+
+  const adminOnboardingSteps: AdminOnboardingStep[] = [
+    {
+      title: "Rédacteur du Sanctuaire",
+      desc: "Utilisez le bouton 'Rédiger' pour publier des articles d'actualités. Vous pouvez également supprimer les anciennes annonces d'un clic.",
+      icon: <Newspaper size={28} />
+    }
+  ]
+
   return (
-    <div className="pt-40 pb-24 min-h-screen bg-background relative overflow-hidden animate-fade-in">
+    <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen bg-background relative overflow-hidden animate-fade-in">
+      {/* GUIDE DU JOUEUR */}
+      <OnboardingModal pageKey="news" steps={onboardingSteps} />
+
+      {/* GUIDE DU GÉRANT (AJOUTÉ) */}
+      {isAdmin && <AdminOnboardingModal pageKey="news" steps={adminOnboardingSteps} />}
+
       {/* Fond d'écran immersif de la page */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background z-10" />
@@ -97,9 +129,40 @@ export function News() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {news.data?.map((item) => (
-              <article key={item.id} className="group glass border-white/5 rounded-[2rem] overflow-hidden flex flex-col hover:border-secondary/30 transition-all duration-500">
+              <article key={item.id} className="group glass border-white/5 rounded-[2.5rem] overflow-hidden flex flex-col hover:border-secondary/30 transition-all duration-500">
                 <div className="aspect-[16/10] overflow-hidden relative">
-                   <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
+                   
+                   {/* AJOUTÉ : Gestion de l'affichage des avatars face-à-face (Si défi actif) ou du portrait de vainqueur (Si résolu) */}
+                   {item.category === 'Ragnarok' && (item as any).challenger_avatar_url && (item as any).challenged_avatar_url ? (
+                     <div className="w-full h-full bg-[#040405] flex items-center justify-center gap-6 px-6 relative border-b border-white/5 overflow-hidden">
+                       {/* Avatar du Challenger (Leader) */}
+                       <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-primary shadow-neon-violet relative shrink-0">
+                         <img src={(item as any).challenger_avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150'} className="w-full h-full object-cover" alt="challenger" />
+                       </div>
+                       
+                       {/* Symbole d'affrontement VS */}
+                       <div className="w-10 h-10 rounded-full bg-accent/20 border border-accent/40 flex items-center justify-center shrink-0 shadow-neon-orange z-10">
+                         <span className="font-display font-black text-xs text-accent">VS</span>
+                       </div>
+
+                       {/* Avatar du Défié */}
+                       <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-secondary shadow-neon-cyan relative shrink-0">
+                         <img src={(item as any).challenged_avatar_url || 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=150'} className="w-full h-full object-cover" alt="challenged" />
+                       </div>
+                     </div>
+                   ) : item.category === 'Ragnarok' && (item as any).winner_avatar_url ? (
+                     // Si victoire résolue : Affiche uniquement l'avatar rond du champion auréolé d'or
+                     <div className="w-full h-full bg-[#040405] flex flex-col items-center justify-center p-6 relative border-b border-white/5 overflow-hidden">
+                       <div className="w-20 h-20 rounded-full overflow-hidden border-4 border-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.5)] relative shrink-0">
+                         <img src={(item as any).winner_avatar_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=150'} className="w-full h-full object-cover" alt="winner" />
+                       </div>
+                       <span className="absolute bottom-2 text-[8px] font-black uppercase text-yellow-500 tracking-[0.2em]">Vainqueur</span>
+                     </div>
+                   ) : (
+                     // Image par défaut de l'article si actualité standard
+                     <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
+                   )}
+
                    <div className="absolute top-4 left-4 bg-secondary text-black text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg">
                      {item.category}
                    </div>
@@ -127,7 +190,10 @@ export function News() {
                      {item.excerpt}
                    </p>
                    <div className="mt-auto pt-6 border-t border-white/5">
-                      <button className="text-[10px] font-black uppercase tracking-widest text-white hover:text-secondary transition-colors">
+                      <button 
+                        onClick={() => setSelectedArticle(item)} // MODIFIÉ : Ouvre l'article au clic
+                        className="text-[10px] font-black uppercase tracking-widest text-white hover:text-secondary transition-colors focus:outline-none"
+                      >
                         Lire l'article
                       </button>
                    </div>
@@ -138,6 +204,60 @@ export function News() {
         )}
 
       </div>
+
+      {/* AJOUTÉ : Pop-up centré de lecture d'article immersive */}
+      {selectedArticle && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-left text-white font-display">
+          <div className="glass p-8 md:p-10 rounded-[3rem] border-2 border-primary shadow-neon-violet max-w-2xl w-full relative flex flex-col gap-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            
+            {/* Bouton de fermeture */}
+            <button 
+              onClick={() => setSelectedArticle(null)}
+              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors z-30 focus:outline-none"
+              title="Fermer la lecture"
+            >
+              <X size={24} />
+            </button>
+
+            {/* Image de l'article */}
+            <div className="aspect-[16/10] sm:aspect-[16/9] w-full rounded-2xl overflow-hidden relative border border-white/10 shrink-0">
+              <img src={selectedArticle.image} alt={selectedArticle.title} className="w-full h-full object-cover" />
+              <div className="absolute top-4 left-4 bg-secondary text-black text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg">
+                {selectedArticle.category}
+              </div>
+            </div>
+
+            {/* Titre & Date */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-white/40">
+                <Calendar size={12} className="text-secondary" />
+                {format(new Date(selectedArticle.created_at), "d MMMM yyyy", { locale: fr })}
+              </div>
+              <h3 className="text-2xl md:text-3xl font-black uppercase text-white tracking-tight leading-tight">
+                {selectedArticle.title}
+              </h3>
+            </div>
+
+            {/* Corps de l'article (Supporte les sauts de ligne) */}
+            <div className="text-xs sm:text-sm text-white/80 leading-relaxed font-medium capitalize-none whitespace-pre-line border-t border-white/5 pt-6">
+              {selectedArticle.excerpt}
+            </div>
+
+            {/* Bouton de fermeture inférieur */}
+            <div className="border-t border-white/5 pt-6 shrink-0">
+              <NeonButton 
+                variant="ghost"
+                className="w-full py-4 text-xs font-black"
+                style={{ borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}
+                onClick={() => setSelectedArticle(null)}
+              >
+                Retour aux actualités
+              </NeonButton>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

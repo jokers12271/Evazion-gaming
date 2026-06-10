@@ -1,6 +1,8 @@
 import { Tournament } from '@/hooks/useTournaments'
 import { NeonButton } from '@/components/ui/NeonButton'
 import { Trophy, X } from 'lucide-react'
+import { useLoyalty } from '@/hooks/useLoyalty'
+import { getRank } from '@/lib/ranks'
 
 interface Props {
   tourney: Tournament
@@ -10,9 +12,29 @@ interface Props {
 }
 
 export function TournamentRegisterModal({ tourney, onClose, onConfirm, isPending }: Props) {
+  const { data: loyalty } = useLoyalty()
+  const userRank = getRank(loyalty?.total_hours || 0)
+
   const isPaid = (tourney as any).is_paid;
-  const fee = (tourney as any).fee_amount || 0;
-  const phone = (tourney as any).payment_phone || '+242 06 000 00 00';
+  const baseFee = (tourney as any).fee_amount || 0;
+
+  // Calcul du tarif réduit automatisé selon le Rang
+  let finalFee = baseFee
+  let discountLabel = ''
+
+  if (userRank.name === 'Pro' || userRank.name === 'Elite') {
+    finalFee = Math.round(baseFee * 0.75)
+    discountLabel = '🎟️ -25% de réduction Rang Pro/Elite appliquée'
+  } else if (userRank.name === 'Légende') {
+    finalFee = Math.round(baseFee * 0.50)
+    discountLabel = '🎟️ -50% de réduction Rang Légende appliquée'
+  } else if (userRank.name === 'Iconique' || userRank.name === 'Divin') {
+    finalFee = 0
+    discountLabel = '🎟️ Inscription GRATUITE Rang Iconique/Divin appliquée'
+  }
+
+  const isReallyPaid = isPaid && finalFee > 0;
+  const phone = (tourney as any).payment_phone || '+242 05 795 72 48';
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
@@ -28,13 +50,19 @@ export function TournamentRegisterModal({ tourney, onClose, onConfirm, isPending
         <h3 className="text-2xl font-black uppercase mb-2">Inscription au Tournoi</h3>
         <p className="text-[10px] text-primary font-black uppercase tracking-widest mb-6">{tourney.title}</p>
 
+        {discountLabel && (
+          <div className="bg-primary/10 border border-primary/20 px-3 py-2 rounded-xl text-[9px] font-black uppercase text-primary tracking-wider mb-4 animate-pulse">
+            {discountLabel}
+          </div>
+        )}
+
         <div className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4 mb-8 text-left text-xs font-bold uppercase tracking-tighter">
           <div className="flex justify-between border-b border-white/5 pb-2">
             <span className="text-white/40">Frais d'inscription</span>
-            <span className="text-white">{isPaid ? `${fee} FCFA` : 'GRATUIT'}</span>
+            <span className="text-white">{isReallyPaid ? `${finalFee} FCFA` : 'GRATUIT'}</span>
           </div>
           
-          {isPaid && (
+          {isReallyPaid && (
             <div className="pt-2 text-center text-[10px] text-white/60 tracking-normal leading-relaxed capitalize-none">
               Veuillez régler en liquide à l'accueil de la salle de jeux, ou effectuez un transfert Mobile Money au : <br />
               <span className="text-primary font-black text-sm tracking-widest block mt-2" translate="no">

@@ -12,10 +12,10 @@ export function TeamLeaderboard() {
 
   return (
     <section className="glass border-white/5 rounded-[2.5rem] overflow-hidden text-left shadow-2xl mb-16">
-      <div className="p-8 border-b border-white/5 bg-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="p-6 md:p-8 border-b border-white/5 bg-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h3 className="font-black uppercase tracking-widest text-sm flex items-center gap-3 text-white">
-            <Trophy className="text-secondary animate-pulse" size={20} /> Classement Mensuel de la Team
+          <h3 className="font-black uppercase tracking-widest text-xs md:text-sm flex items-center gap-3 text-white">
+            <Trophy className="text-secondary animate-pulse" size={18} /> Classement Mensuel de la Team
           </h3>
           <p className="text-[9px] uppercase font-bold text-white/30 tracking-widest mt-1">Basé sur les victoires de face-à-face • {currentMonthText}</p>
         </div>
@@ -23,7 +23,7 @@ export function TeamLeaderboard() {
         <select 
           value={selectedTeam} 
           onChange={e => setSelectedTeam(e.target.value)}
-          className="bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none"
+          className="bg-white/5 border border-white/10 rounded-xl p-2 md:p-2.5 text-[10px] md:text-xs text-white focus:outline-none"
         >
           <option value="FC 26" className="bg-background">Team - FC26</option>
           <option value="Tekken" className="bg-background">Team - Tekken</option>
@@ -35,9 +35,9 @@ export function TeamLeaderboard() {
       </div>
 
       {isLoading ? (
-        <div className="p-20 flex flex-col items-center justify-center">
-          <Loader2 className="animate-spin text-secondary mb-4" size={32} />
-          <p className="text-[10px] uppercase font-black tracking-widest text-white/40">Chargement du tableau des champions...</p>
+        <div className="p-16 flex flex-col items-center justify-center">
+          <Loader2 className="animate-spin text-secondary mb-4" size={24} />
+          <p className="text-[9px] uppercase font-black tracking-widest text-white/40">Chargement...</p>
         </div>
       ) : (
         <div className="p-0">
@@ -49,10 +49,12 @@ export function TeamLeaderboard() {
               return (
                 <div 
                   key={row.user_id} 
-                  className="group flex items-center gap-6 p-6 border-b border-white/5 hover:bg-white/5 transition-all duration-300 text-white"
+                  /* GRILLE CSS STRICTE : Aligne géométriquement chaque colonne de manière fixe sans débordement possible */
+                  className="group grid grid-cols-[30px_42px_1fr_80px] items-center gap-3 md:gap-6 px-4 md:px-8 py-4 border-b border-white/5 hover:bg-white/5 transition-all duration-300 text-white text-xs"
                 >
+                  {/* Colonne 1 : Position (#1, #2) */}
                   <div className={cn(
-                    "w-12 text-2xl font-black italic", 
+                    "text-sm md:text-xl font-black italic", 
                     index === 0 ? "text-yellow-500" : 
                     index === 1 ? "text-slate-300" : 
                     index === 2 ? "text-orange-400" : "text-white/15"
@@ -60,32 +62,31 @@ export function TeamLeaderboard() {
                     #{index + 1}
                   </div>
 
-                  <div className="w-12 h-12 rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center relative">
+                  {/* Colonne 2 : Photo de profil (Verrouillée avec shrink-0 contre tout écrasement) */}
+                  <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center relative shrink-0">
                     {profile.avatar_url ? (
                       <img src={profile.avatar_url} className="w-full h-full object-cover" alt="avatar" />
                     ) : (
-                      <Star size={16} className="text-white/10" />
+                      <Star size={14} className="text-white/10" />
                     )}
                   </div>
 
-                  <div className="flex-1">
-                    <div translate="no" className="font-black text-lg uppercase tracking-tighter text-white leading-none">
-                      {profile.display_name}
-                    </div>
+                  {/* Colonne 3 : Pseudo du joueur (Police de 11px sur mobile, coupe avec points de suspension si trop long) */}
+                  <div translate="no" className="font-black text-[11px] md:text-sm uppercase tracking-tight text-white leading-none truncate text-left">
+                    {profile.display_name}
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-secondary font-black text-2xl tracking-tighter">
-                      {row.victories} {row.victories > 1 ? 'Victoires' : 'Victoire'}
-                    </span>
+                  {/* Colonne 4 : Compteur de victoires aligné à droite */}
+                  <div className="text-right text-[10px] md:text-xs font-black uppercase tracking-wider text-secondary">
+                    {row.victories} {row.victories > 1 ? 'Victoires' : 'Victoire'}
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="p-20 text-center">
-              <p className="text-xs uppercase font-black tracking-[0.4em] text-white/15 leading-relaxed">
-                Le tapis est vide... <br />Aucun match en Face-à-Face n'a été enregistré pour la Team {selectedTeam} ce mois-ci.
+            <div className="p-16 text-center">
+              <p className="text-[10px] md:text-xs uppercase font-black tracking-[0.25em] text-white/15 leading-relaxed">
+                Aucun match enregistré pour la Team {selectedTeam} ce mois-ci.
               </p>
             </div>
           )}

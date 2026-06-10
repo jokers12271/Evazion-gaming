@@ -18,6 +18,14 @@ import { TeamConfigsAdmin } from '@/components/community/TeamConfigsAdmin' // AJ
 import { FaceToFaceAdmin } from '@/components/community/FaceToFaceAdmin' // AJOUTÉ
 import { TeamLeaderboard } from '@/components/community/TeamLeaderboard' // AJOUTÉ
 import { MonthlyRewardCard } from '@/components/community/MonthlyRewardCard' // AJOUTÉ
+import { HallOfFame } from '@/components/community/HallOfFame'
+import { useLoyalty } from '@/hooks/useLoyalty'
+import { TeamRenewalsAdmin } from '@/components/community/TeamRenewalsAdmin'
+import { useAllPendingRenewals } from '@/hooks/useTeamMembership'
+import { OnboardingModal, OnboardingStep } from '@/components/ui/OnboardingModal'
+import { Swords } from 'lucide-react'
+import { AdminOnboardingModal, AdminOnboardingStep } from '@/components/ui/AdminOnboardingModal'
+import { Landmark } from 'lucide-react'
 
 // AJOUTÉ : Liste statique des Teams de jeux du Sanctuary
 const TEAMS = [
@@ -35,6 +43,9 @@ export function Community() {
   const { data: metadata } = useUserMetadata() // AJOUTÉ
   const updateCommunityMutation = useUpdateCommunity() // AJOUTÉ
 
+  const { data: loyalty } = useLoyalty() // AJOUTÉ : Lecture du cumul de fidélité
+  const userRank = getRank(loyalty?.total_hours || 0) // Détermination du Rang
+
   const currentTeam = (metadata as any)?.community_team || null
   const isAdmin = (metadata as any)?.is_admin || false // AJOUTÉ
   const [joinedTeamName, setJoinedTeamName] = useState<string | null>(null) // AJOUTÉ
@@ -43,20 +54,27 @@ export function Community() {
   const [targetJoinTeam, setTargetJoinTeam] = useState<any | null>(null)
   const { data: teamConfigs } = useTeamConfigs()
   const { data: myRequests } = useMyMembershipRequests() // MODIFIÉ
-  const { createRequest, leaveTeam } = useTeamMembershipActions()
+  const { createRequest, leaveTeam, requestRenewal } = useTeamMembershipActions()
 
   // Extraire les teams rejointes et en attente
   const approvedTeams = myRequests?.filter(r => r.status === 'approved') || []
   const pendingTeams = myRequests?.filter(r => r.status === 'pending') || []
   const totalTeamsCount = approvedTeams.length;
 
-  // AJOUTÉ : Requête en direct pour charger la liste des membres inscrits dans les teams
+  // MODIFIÉ : Chargement en direct des membres approuvés directement depuis la table de liaison (Pour le support Multi-teams)
   const { data: allMembers } = useQuery({
-    queryKey: ['all_members'],
+    queryKey: ['all_team_members_list'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('users_metadata')
-        .select('user_id, display_name, avatar_url, community_team');
+        .from('team_membership_requests')
+        .select(`
+          user_id,
+          team_id,
+          status,
+          users_metadata ( display_name, avatar_url )
+        `)
+        .eq('status', 'approved'); // Uniquement les membres validés payés
+
       if (error) throw error;
       return data || [];
     }
@@ -104,17 +122,47 @@ export function Community() {
   }
 
   // Composant pour l'icône de monnaie (Style médaillon identique au logo)
-
-  // Composant pour l'icône de monnaie (Style médaillon identique au logo)
   const ManiIcon = ({ size = "w-6 h-6" }) => (
-    <div className={cn("rounded-full overflow-hidden border border-primary/40 bg-background shadow-neon-violet shrink-0", size)}>
+    <div className={cn("rounded-full overflow-hidden border border-primary/40 bg-background shadow-neon-violet shrink-0 relative", size)}>
       <img src="/mani.jpg" alt="M" className="w-full h-full object-cover scale-110" />
       <div className="absolute inset-0 shadow-[inset_0_0_4px_rgba(0,0,0,0.8)]" />
     </div>
   )
 
+  const onboardingSteps: OnboardingStep[] = [
+    {
+      title: "Le Cocon Social",
+      desc: "Rejoignez une Team de jeu (FC 26, Tekken, etc.), réglez vos cotisations de groupe et faites-vous de vrais alliés en salle.",
+      icon: <Users size={28} />
+    },
+    {
+      title: "L'Arène Ragnarok",
+      desc: "C'est ici que s'affrontent les membres de chaque Team. Provoquez vos rivaux et pariez des MANI ou des heures de rang !",
+      icon: <Swords size={28} />
+    }
+  ]
+
+  const adminOnboardingSteps: AdminOnboardingStep[] = [
+    {
+      title: "Saisie de face-à-face",
+      desc: "Enregistrez ici les résultats des duels sportifs ou de combat en face-à-face disputés dans la salle physique pour mettre à jour le classement.",
+      icon: <Users size={28} />
+    },
+    {
+      title: "Cotisations & Gestion des frais",
+      desc: "Définissez les frais d'intégration et les cotisations de chaque Team d'un clic. Approuvez ou refusez les demandes d'adhésions reçues.",
+      icon: <Landmark size={28} />
+    }
+  ]
+
   return (
-    <div className="pt-40 pb-24 min-h-screen bg-background text-center font-display relative overflow-hidden animate-fade-in">
+    <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen bg-background text-center font-display relative overflow-hidden animate-fade-in">
+      {/* GUIDE DU JOUEUR */}
+      <OnboardingModal pageKey="community" steps={onboardingSteps} />
+
+      {/* GUIDE DU GÉRANT (AJOUTÉ) */}
+      {isAdmin && <AdminOnboardingModal pageKey="community" steps={adminOnboardingSteps} />}
+      
       {/* Fond d'écran immersif de la page */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background z-10" />
@@ -124,19 +172,24 @@ export function Community() {
           alt="community social backdrop"
         />
       </div>
-      <div className="container mx-auto px-4 max-w-6xl relative z-20">
+      <div className="container mx-auto px-5 max-w-6xl relative z-20">
         
         {/* HEADER */}
         <header className="mb-20">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full glass border-white/10 mb-6 text-white">
+          <div className="px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.25em] border border-white/10 bg-background/60 backdrop-blur-md inline-flex items-center gap-2 shadow-lg mb-5 relative z-10">
             <Users className="text-secondary" size={14} />
-            <span className="text-[10px] uppercase tracking-[0.2em] font-black">Le Sanctuary Social</span>
+            <span className="text-[10px] uppercase tracking-[0.2em] font-black" translate="no">Le Sanctuary Social</span>
           </div>
           <h1 className="text-6xl md:text-8xl font-black uppercase tracking-tighter text-white leading-[0.8]">
             L'ÉLITE DU <br /><span className="text-primary text-glow-violet italic">SANCTUARY</span>
           </h1>
         </header>
 
+        {/* PANNEAU DE CONTRÔLE DES COTISATIONS ADMIN (AJOUTÉ) */}
+        {isAdmin && <TeamRenewalsAdmin />}
+
+        {/* AJOUTÉ : Panneau de Validation des Demandes d'Adhésions d'Équipes (Visible uniquement Admin) */}
+        {isAdmin && <TeamRequestsAdmin />}
         
         {/* AJOUTÉ : Carte dynamique de récompense mensuelle visible par tous */}
         <MonthlyRewardCard isAdmin={isAdmin} />
@@ -147,14 +200,14 @@ export function Community() {
         {/* AJOUTÉ : Panneau de Gestion des Cotisations (Visible uniquement Admin) */}
         {isAdmin && <TeamConfigsAdmin />}
 
-        {/* AJOUTÉ : Panneau de Validation des Demandes d'Adhésions d'Équipes (Visible uniquement Admin) */}
-        {isAdmin && <TeamRequestsAdmin />}
-
         {/* AJOUTÉ : Panneau d'Enregistrement de Face-à-Face (Visible uniquement Admin) */}
         {isAdmin && <FaceToFaceAdmin />}
 
         {/* AJOUTÉ : Classement Mensuel basé sur les victoires de Team (Visible par tous) */}
         <TeamLeaderboard />
+
+        {/* PANNEAU DU HALL OF FAME (AJOUTÉ) */}
+        <HallOfFame />
 
         {/* AJOUTÉ : GRILLE DES TEAMS DE JEUX */}
         <section className="mb-24 text-left">
@@ -165,11 +218,39 @@ export function Community() {
             </h2>
           </div>
 
+          {/* BANDEAU DE RELANCE AUTOMATIQUE À J-7 (DÈS LE 24 DU MOIS EN COURS - AJOUTÉ) */}
+          {(() => {
+            const now = new Date();
+            const currentDay = now.getDate();
+            const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const isWithinSevenDays = (lastDayOfMonth - currentDay) <= 7;
+
+            // Trouver si l'utilisateur connecté a des abonnements actifs à renouveler
+            const myUnpaidActiveTeams = approvedTeams.filter(r => !r.renewal_status);
+
+            if (isWithinSevenDays && myUnpaidActiveTeams.length > 0 && !isAdmin) {
+              return (
+                <div className="mb-10 bg-yellow-500/10 border-2 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.25)] p-6 rounded-[2rem] text-left animate-pulse">
+                  <h4 className="text-xs font-black uppercase text-yellow-500 tracking-wider mb-2">
+                    ⚠️ RELANCE DE COTISATIONS MENSUELLES (ÉCHÉANCE AU 1er)
+                  </h4>
+                  <p className="text-xs text-white/80 leading-relaxed font-bold uppercase tracking-tight">
+                    Vos abonnements pour les Teams ({myUnpaidActiveTeams.map(t => t.team_id).join(', ')}) arrivent à échéance le 1er du mois. 
+                    Pour conserver vos privilèges de Team exclusifs, pensez à régler vos cotisations mensuelles (remise de votre Rang appliquée d'office) via le bouton « Payer Cotisation » avant le 1er !
+                  </p>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {TEAMS.map((team) => {
-              const isMyTeam = currentTeam === team.id;
-              // Filtrer pour obtenir en direct les vrais inscrits de cette équipe
-              const teamMembers = allMembers?.filter((m: any) => m.community_team === team.id) || [];
+              // MODIFIÉ : Vérification si le joueur connecté fait partie de cette team
+              const isMyTeam = approvedTeams.some(r => r.team_id === team.id);
+              
+              // MODIFIÉ : Filtrer les membres réels validés de cette équipe
+              const teamMembers = allMembers?.filter((m: any) => m.team_id === team.id) || [];
 
               return (
                 <div 
@@ -200,30 +281,29 @@ export function Community() {
                       {isMyTeam && (
                         <span 
                           className="text-[8px] font-black px-2.5 py-1 rounded-full uppercase tracking-widest border"
-                          style={{ color: team.color, borderColor: team.color, backgroundColor: `${team.color}10` }}
-                        >
-                          Ma Team
-                        </span>
+                          style={{ color: team.color, borderColor: team.color, backgroundColor: `${team.color}10` }}>Ma Team</span>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground font-medium mb-4 leading-relaxed">
-                      {team.tagline}
-                    </p>
+                    <p className="text-xs text-muted-foreground font-medium mb-4 leading-relaxed">{team.tagline}</p>
                   </div>
 
-                  {/* Liste en direct des membres réels inscrits */}
+                  {/* Liste en direct des membres réels inscrits (Décodage robuste multi-teams) */}
                   <div className="relative z-10 mb-4 bg-black/40 p-4 rounded-2xl border border-white/5 backdrop-blur-sm">
                     <p className="text-[9px] font-black uppercase text-white/40 tracking-wider mb-2">Membres ({teamMembers.length}) :</p>
                     <div className="flex flex-wrap gap-1.5 max-h-[60px] overflow-y-auto pr-1 custom-scrollbar">
-                      {teamMembers.map((member: any) => (
-                        <span 
-                          key={member.user_id} 
-                          className="text-[9px] font-bold bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 text-white/80"
-                          translate="no"
-                        >
-                          @{member.display_name}
-                        </span>
-                      ))}
+                      {teamMembers.map((member: any) => {
+                        const profile = Array.isArray(member.users_metadata) ? member.users_metadata[0] : member.users_metadata;
+                        const displayName = profile?.display_name || 'Gamer';
+                        return (
+                          <span 
+                            key={member.user_id} 
+                            className="text-[9px] font-bold bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 text-white/80"
+                            translate="no"
+                          >
+                            @{displayName}
+                          </span>
+                        );
+                      })}
                       {teamMembers.length === 0 && (
                         <p className="text-[9px] italic text-white/20 uppercase tracking-widest py-1">Aucun membre inscrit</p>
                       )}
@@ -246,14 +326,37 @@ export function Community() {
                     </ul>
                   </div>
 
-                  {/* Tarifs d'adhésion affichés en direct sur la carte de l'équipe */}
-                  <div className="relative z-10 mb-6 flex justify-between items-center text-[9px] font-black uppercase text-white/40 tracking-wider">
-                    <span>Adhésion : {teamConfigs?.find(c => c.team_id === team.id)?.join_fee || 0} F</span>
-                    <span>Mensuel : {teamConfigs?.find(c => c.team_id === team.id)?.monthly_fee || 0} F</span>
+                  {/* Tarifs d'adhésion affichés en direct avec remises de rang */}
+                  <div className="relative z-10 mb-6 flex justify-between items-center text-[9px] font-black uppercase tracking-wider">
+                    <span className="text-white/40">Adhésion : {teamConfigs?.find(c => c.team_id === team.id)?.join_fee || 0} F</span>
+                    <span className="text-white/40 flex items-center gap-1.5">
+                      Mensuel :{' '}
+                      {(() => {
+                        const baseMonthly = teamConfigs?.find(c => c.team_id === team.id)?.monthly_fee || 0;
+                        let finalMonthly = baseMonthly;
+                        let isDiscounted = false;
+
+                        if (userRank.name === 'Légende') {
+                          finalMonthly = Math.round(baseMonthly * 0.75);
+                          isDiscounted = true;
+                        } else if (userRank.name === 'Iconique' || userRank.name === 'Divin') {
+                          finalMonthly = Math.round(baseMonthly * 0.50);
+                          isDiscounted = true;
+                        }
+
+                        return isDiscounted ? (
+                          <>
+                            <span className="line-through opacity-30">{baseMonthly}</span>
+                            <span className="text-cyan-400 font-black animate-pulse">{finalMonthly} F</span>
+                          </>
+                        ) : (
+                          <span className="text-white">{baseMonthly} F</span>
+                        );
+                      })()}
+                    </span>
                   </div>
 
-                  {/* Actions de validation d'adhésion, de désinscription, et d'administration (Support Multi-teams 3 Max) */}
-                  <div className="relative z-10 w-full">
+                  <div className="relative z-10 w-full space-y-2">
                     {isAdmin ? (
                       <NeonButton
                         variant="ghost"
@@ -262,35 +365,67 @@ export function Community() {
                       >
                         ADMINISTRER LA TEAM
                       </NeonButton>
-                    ) : approvedTeams.some(r => r.team_id === team.id) ? (
-                      <NeonButton
-                        variant="ghost"
-                        onClick={() => handleLeaveTeamSubmit(team.id)} // MODIFIÉ
-                        className="w-full py-2.5 text-[9px] font-black tracking-widest hover:bg-red-500/10 hover:text-red-500 transition-colors"
-                        style={{ borderColor: 'rgba(239, 68, 68, 0.3)', color: '#ef4444' }}
-                      >
-                        QUITTER LA TEAM
-                      </NeonButton>
-                    ) : pendingTeams.some(r => r.team_id === team.id) ? (
-                      <NeonButton
-                        variant="ghost"
-                        disabled
-                        className="w-full py-2.5 text-[9px] font-black tracking-widest cursor-not-allowed opacity-60 animate-pulse"
-                        style={{ borderColor: 'rgba(234, 179, 8, 0.3)', color: '#eab308' }}
-                      >
-                        DEMANDE EN ATTENTE
-                      </NeonButton>
-                    ) : (
-                      <NeonButton
-                        variant="violet"
-                        disabled={totalTeamsCount >= 3 || createRequest.isPending}
-                        onClick={() => handleJoinTeam(team.id)}
-                        className="w-full py-2.5 text-[9px] font-black tracking-widest"
-                        style={{ borderColor: `${team.color}40` }}
-                      >
-                        {totalTeamsCount >= 3 ? "LIMITE TEAMS ATTEINTE (3 MAX)" : "INTÉGRER LA TEAM"}
-                      </NeonButton>
-                    )}
+                    ) : (() => {
+                      const request = approvedTeams.find(r => r.team_id === team.id);
+                      const isPendingRenewal = request?.renewal_status === 'pending_renewal';
+
+                      if (request) {
+                        return (
+                          <div className="flex flex-col sm:flex-row gap-2 w-full">
+                            {/* Bouton de Désinscription */}
+                            <button
+                              onClick={() => handleLeaveTeamSubmit(team.id)}
+                              className="flex-1 py-2 text-[8px] font-black uppercase tracking-wider border border-red-500/20 hover:bg-red-500/10 text-red-500 rounded-xl transition-colors"
+                            >
+                              Quitter la Team
+                            </button>
+
+                            {/* Bouton de Renouvellement (CORRIGÉ ET OPÉRATIONNEL) */}
+                            <button
+                              onClick={() => {
+                                if (!isPendingRenewal && confirm(`Confirmer la demande de renouvellement de votre cotisation pour la Team ${team.id} ?`)) {
+                                  requestRenewal.mutate(team.id); // <--- MUTATION APPELÉE CORRECTEMENT (CORRIGÉ !)
+                                }
+                              }}
+                              disabled={isPendingRenewal}
+                              className={cn(
+                                "flex-1 py-2 text-[8px] font-black uppercase tracking-wider rounded-xl border transition-all duration-300",
+                                isPendingRenewal 
+                                  ? "border-yellow-500/20 bg-yellow-500/5 text-yellow-500 cursor-not-allowed animate-pulse" 
+                                  : "border-secondary/20 hover:bg-secondary/15 text-secondary"
+                              )}
+                            >
+                              {isPendingRenewal ? "Renouvellement..." : "Payer Cotisation"}
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      if (pendingTeams.some(r => r.team_id === team.id)) {
+                        return (
+                          <NeonButton
+                            variant="ghost"
+                            disabled
+                            className="w-full py-2.5 text-[9px] font-black tracking-widest cursor-not-allowed opacity-60 animate-pulse"
+                            style={{ borderColor: 'rgba(234, 179, 8, 0.3)', color: '#eab308' }}
+                          >
+                            DEMANDE EN ATTENTE
+                          </NeonButton>
+                        );
+                      }
+
+                      return (
+                        <NeonButton
+                          variant="violet"
+                          disabled={totalTeamsCount >= 3 || createRequest.isPending}
+                          onClick={() => handleJoinTeam(team.id)}
+                          className="w-full py-2.5 text-[9px] font-black tracking-widest"
+                          style={{ borderColor: `${team.color}40` }}
+                        >
+                          {totalTeamsCount >= 3 ? "LIMITE TEAMS ATTEINTE (3 MAX)" : "INTÉGRER LA TEAM"}
+                        </NeonButton>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -298,7 +433,7 @@ export function Community() {
           </div>
         </section>
 
-        {/* TABLEAU DES SCORES */}
+        {/* TABLEAU DES SCORES "TOP 10 MINEURS" AVEC ALIGNEMENT GÉOMÉTRIQUE PARFAIT (CORRIGÉ ET MODÉLISÉ) */}
         <section className="glass border-white/5 rounded-[2.5rem] overflow-hidden text-left shadow-2xl">
           <div className="p-8 border-b border-white/5 bg-white/5 flex items-center justify-between">
             <h3 className="font-black uppercase tracking-widest text-sm flex items-center gap-3 text-white">
@@ -323,31 +458,32 @@ export function Community() {
                   return (
                     <div 
                       key={player.user_id} 
-                      className="group flex items-center gap-6 p-8 border-b border-white/5 hover:bg-white/5 transition-all duration-300"
+                      /* GRILLE COMPACTE ET ALIGNÉE GÉOMÉTRIQUEMENT SUR MOBILE (CORRIGÉ & DISSOCIÉ DE TOUT ÉCRASEMENT D'AVATAR) */
+                      className="group grid grid-cols-[30px_42px_1fr_85px] items-center gap-3 md:gap-6 px-4 md:px-8 py-4 border-b border-white/5 hover:bg-white/5 transition-all duration-300 text-white text-xs"
                     >
                       {/* Position */}
                       <div className={cn(
-                        "w-12 text-3xl font-black italic", 
-                        index === 0 ? "text-yellow-500 text-glow-orange" : 
+                        "text-sm md:text-xl font-black italic", 
+                        index === 0 ? "text-yellow-500" : 
                         index === 1 ? "text-slate-300" : 
-                        index === 2 ? "text-orange-400" : "text-white/10"
+                        index === 2 ? "text-orange-400" : "text-white/15"
                       )}>
                         #{index + 1}
                       </div>
 
-                      {/* Photo de profil (Avatar) */}
-                      <div className="w-14 h-14 rounded-2xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center relative">
+                      {/* Photo de profil (Avatar - Verrouillé contre le rétrécissement mobile avec shrink-0) */}
+                      <div className="w-10 h-10 md:w-11 md:h-11 rounded-xl overflow-hidden border border-white/10 bg-white/5 flex items-center justify-center relative shrink-0">
                         {meta?.avatar_url ? (
                           <img src={meta.avatar_url} className="w-full h-full object-cover" alt="avatar" />
                         ) : (
-                          <Star size={20} className="text-white/10" />
+                          <Star size={14} className="text-white/10" />
                         )}
                         <div className={cn("absolute bottom-0 left-0 right-0 h-1", rankInfo.bg)} style={{ backgroundColor: rankInfo.color }} />
                       </div>
 
-                      {/* Identité et Rang (Basé sur les Heures) */}
-                      <div className="flex-1">
-                        <div className="font-black text-2xl uppercase tracking-tighter text-white group-hover:text-secondary transition-colors leading-none mb-1" translate="no">
+                      {/* Identité et Rang (Basé sur les Heures, pseudos sécurisés et compacts) */}
+                      <div className="text-left truncate flex flex-col justify-center">
+                        <div className="font-black text-[11px] md:text-sm uppercase tracking-tight text-white group-hover:text-secondary transition-colors leading-none mb-1.5 truncate" translate="no">
                            {player.display_name || "Gamer"}
                         </div>
                         <div className={cn("text-[10px] font-black uppercase tracking-[0.2em]", rankInfo.label)}>
@@ -355,12 +491,10 @@ export function Community() {
                         </div>
                       </div>
 
-                      {/* Score MANI (Le critère de classement) */}
-                      <div className="text-right">
-                        <div className="text-secondary font-black text-3xl tracking-tighter flex items-center justify-end gap-3">
-                          {player.points || 0}
-                          <ManiIcon size="w-8 h-8" />
-                        </div>
+                      {/* Score MANI aligné au millimètre près sur la droite */}
+                      <div className="flex items-center justify-end gap-1.5 text-right font-black text-secondary text-xs md:text-lg">
+                        {player.points || 0}
+                        <ManiIcon size="w-5 h-5" />
                       </div>
                     </div>
                   );
@@ -375,7 +509,6 @@ export function Community() {
         </section>
       </div>
 
-      {/* AJOUTÉ : Pop-up centré de confirmation d'intégration de team */}
       {joinedTeamName && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center">
           <div className="glass p-10 rounded-[2.5rem] border-2 border-secondary shadow-neon-cyan max-w-md w-full relative">

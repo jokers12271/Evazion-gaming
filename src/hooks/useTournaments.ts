@@ -9,12 +9,14 @@ export interface Tournament {
   description: string
   status: string
   image_url: string
+  is_paid?: boolean       // AJOUTÉ (Déclaré pour la base de données)
+  fee_amount?: number     // AJOUTÉ (Déclaré pour la base de données)
+  payment_phone?: string   // AJOUTÉ (Déclaré pour la base de données)
 }
 
 export function useTournaments() {
   const queryClient = useQueryClient();
 
-  // On extrait "data" et on lui donne une valeur par défaut []
   const query = useQuery({
     queryKey: ['tournaments'],
     queryFn: async () => {
@@ -56,7 +58,7 @@ export function useTournaments() {
   });
 
   return { 
-    tournaments: query.data ?? [], // Retourne un tableau vide si pas encore chargé
+    tournaments: query.data ?? [],
     isLoading: query.isLoading,
     isError: query.isError,
     addTournament, 

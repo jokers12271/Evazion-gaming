@@ -11,7 +11,6 @@ export function useReservations() {
     queryFn: async () => {
       if (!user) return [];
       
-      // MODIFIÉ : Utilisation de maybeSingle() à la place de single() pour éviter les plantages de requêtes
       const { data: profile, error: profileError } = await supabase
         .from('users_metadata')
         .select('is_admin')
@@ -32,13 +31,29 @@ export function useReservations() {
 
       const { data, error } = await query.order('start_time', { ascending: false });
       if (error) {
-        console.error("Erreur d'affichage des réservations (votre base de données rejette la jointure) :", error.message); // AJOUTÉ
+        console.error("Erreur de chargement des réservations :", error.message);
         throw error;
       }
+
+      // Appliquer la barrière temporelle de 48h sur les réservations closes pour le joueur
+      if (profile && !profile.is_admin) {
+        const now = new Date();
+        const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+        return (data || []).filter((res: any) => {
+          // Toujours afficher si la session est active, en attente ou interrompue
+          if (res.status === 'en cours' || res.status === 'pending' || res.status === 'interrompu') {
+            return true;
+          }
+          const startTime = new Date(res.start_time);
+          return startTime >= fortyEightHoursAgo;
+        });
+      }
+
       return data || [];
     },
     enabled: !!user,
-    refetchInterval: 10000 // Actualisation en temps réel toutes les 10 secondes
+    refetchInterval: 10000
   });
 
   const updateStatus = useMutation({
@@ -64,7 +79,7 @@ export function useReservations() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reservations'] })
   });
 
-  // AJOUT DE LA MUTATION DE CRÉATION DE RÉSERVATION MANQUANTE
+  // MUTATION DE CRÉATION DE RÉSERVATION (CORRIGÉE)
   const createReservation = useMutation({
     mutationFn: async (newRes: { 
       station_id: string; 
@@ -73,8 +88,8 @@ export function useReservations() {
       display_name: string; 
       status: string;
       user_id?: string;
+      bonus_minutes_applied?: number; // <-- AJOUTÉ
     }) => {
-      // Si un user_id spécifique est passé (ex: scan par l'admin), on l'utilise, sinon on prend l'utilisateur connecté
       const finalUserId = newRes.user_id || user?.id;
       if (!finalUserId) throw new Error("Aucun ID utilisateur disponible pour la réservation.");
 
@@ -85,7 +100,8 @@ export function useReservations() {
           end_time: newRes.end_time,
           display_name: newRes.display_name,
           status: newRes.status,
-          user_id: finalUserId
+          user_id: finalUserId,
+          bonus_minutes_applied: newRes.bonus_minutes_applied || 0 // <-- ENREGISTRE LE BONUS EN BASE
         }
       ]);
       if (error) throw error;

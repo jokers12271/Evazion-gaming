@@ -3,13 +3,20 @@ import { useReservations } from '@/hooks/useReservations'
 import { useUserMetadata } from '@/hooks/useUserMetadata' 
 import { NeonButton } from '@/components/ui/NeonButton'
 import { useAuth } from '@/hooks/useAuth'
-import { Clock, Monitor, AlertCircle, Power, PowerOff, CheckCircle2, Activity, Users } from 'lucide-react' // MODIFIÉ
+import { Clock, Monitor, AlertCircle, Power, PowerOff, CheckCircle2, Activity, Users, Lock } from 'lucide-react'
 import { cn } from '@blinkdotnew/ui'
 import { toast } from 'react-hot-toast'
 import { useStationsStatus } from '@/hooks/useStationsStatus'
 import { useStationManagement } from '@/hooks/useStationManagement'
-import { useQuery } from '@tanstack/react-query' // AJOUTÉ
-import { supabase } from '@/lib/supabase' // AJOUTÉ
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { usePrivileges } from '@/hooks/usePrivileges'
+import { getRank } from '@/lib/ranks'
+import { useLoyalty } from '@/hooks/useLoyalty'
+import { OnboardingModal, OnboardingStep } from '@/components/ui/OnboardingModal'
+import { Map, CalendarDays } from 'lucide-react'
+import { AdminOnboardingModal, AdminOnboardingStep } from '@/components/ui/AdminOnboardingModal'
+
 
 const DURATIONS = [
   { label: '⚡ 15 min', value: 15, price: 500 },
@@ -17,21 +24,62 @@ const DURATIONS = [
   { label: '🎮 1h', value: 60, price: 1500 },
   { label: '🏆 1h30', value: 90, price: 2000 },
   { label: '📦 Pack 4h', value: 240, price: 5000 },
+  { label: '👑 Pack Légende 5h', value: 300, price: 5000 }, // AJOUTÉ : Pack Légende
 ];
 
 export function Reservation() {
   const { isAuthenticated, user } = useAuth()
   const { reservations, createReservation } = useReservations()
   const { data: metadata } = useUserMetadata() 
-  const { data: occupiedStations } = useStationsStatus(); 
-  const { manualStates, toggleStation } = useStationManagement();
+  const { data: occupiedStations } = useStationsStatus() 
+  const { manualStates, toggleStation } = useStationManagement()
+  const { checkWeeklyBonusUsed } = usePrivileges()
+  const { data: loyalty } = useLoyalty()
 
+  const isAdmin = (metadata as any)?.is_admin;
+
+  // Détermination du VRAI cumul d'heures et du VRAI rang actuel
+  const userHours = loyalty?.total_hours || 0
+  const userRank = getRank(userHours)
+
+  // 1. Définition de la valeur théorique du bonus hebdomadaire selon le rang
+  const theoreticalBonus = 
+    userRank.name === 'Novice' || userRank.name === 'Amateur' ? 15 : 
+    userRank.name === 'Semi-Pro' ? 30 : 0
+
+  // 2. Appel de la vérification dynamique sur la base de données
+  const hasUsedWeeklyBonusQuery = checkWeeklyBonusUsed(theoreticalBonus)
+  const hasAlreadyUsedWeeklyBonus = hasUsedWeeklyBonusQuery.data || false
+
+  // 3. Application du bonus si éligible (Avec Stacking & Remplacement par l'Elite)
+  let privilegeMinutesBonus = 0
+  let privilegeAppliedLabel = ''
+
+  if (isAuthenticated && !isAdmin) {
+    if ((userRank.name === 'Novice' || userRank.name === 'Amateur') && !hasAlreadyUsedWeeklyBonus) {
+      privilegeMinutesBonus = 15
+      privilegeAppliedLabel = '🎁 Privilège Novice/Amateur : +15 min offertes ajoutées à votre 1ère session de la semaine !'
+    } else if (userRank.name === 'Semi-Pro' && !hasAlreadyUsedWeeklyBonus) {
+      privilegeMinutesBonus = 30
+      privilegeAppliedLabel = '🎁 Privilège Semi-Pro : +30 min offertes ajoutées à votre 1ère session de la semaine !'
+    } else if (userRank.name === 'Pro' || userRank.name === 'Elite') {
+      privilegeMinutesBonus = 15
+      privilegeAppliedLabel = `🎁 Privilège ${userRank.name} : +15 min offertes ajoutées d'office sur toutes vos sessions !`
+    } else if (userRank.name === 'Légende') {
+      privilegeMinutesBonus = 30
+      privilegeAppliedLabel = '🎁 Privilège Légende : +30 min offertes ajoutées d\'office sur toutes vos sessions !'
+    } else if (userRank.name === 'Iconique' || userRank.name === 'Divin') {
+      privilegeMinutesBonus = 60
+      privilegeAppliedLabel = `🎁 Privilège ${userRank.name} : +1h de session offerte ajoutée d'office sur toutes vos sessions !`
+    }
+  }
+
+  // Le reste du fichier demeure inchangé
   const stations = Array.from({ length: 10 }, (_, i) => ({
     id: `PS5_${i + 1}`,
     name: `Station ${i + 1}`,
   }))
 
-  // AJOUTÉ : Calcul du taux d'occupation des consoles du Sanctuary (en direct)
   const totalOccupied = stations.filter(station => {
     const isManuallyOccupied = manualStates?.find(s => s.station_id === station.id)?.is_manual_occupied;
     const isAutoOccupied = occupiedStations?.includes(station.id);
@@ -39,7 +87,6 @@ export function Reservation() {
   }).length;
   const occupancyRate = Math.round((totalOccupied / 10) * 100);
 
-  // AJOUTÉ : Filtrer les réservations actuellement en cours (solo)
   const activeSessions = reservations?.filter((res: any) => res.status === 'en cours') || [];
   
   const [selectedStation, setSelectedStation] = useState<string | null>(null)
@@ -47,10 +94,10 @@ export function Reservation() {
   const [totalPrice, setTotalPrice] = useState<number>(1500)
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [selectedTime, setSelectedTime] = useState<string>('14:00')
-  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false) // AJOUTÉ
+  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false)
 
-  const isAdmin = (metadata as any)?.is_admin;
 
+  // LOGIQUE DE CONFIRMATION AVEC ENREGISTREMENT DU BONUS ET NOTIFICATIONS
   const handleBooking = async () => {
     if (!isAuthenticated || !user) { 
       toast.error("Connexion requise pour réserver une session");
@@ -59,8 +106,9 @@ export function Reservation() {
     }
     if (!selectedStation) { toast.error('Choisissez un poste'); return; }
 
+    const finalDuration = selectedDuration + privilegeMinutesBonus // Application du bonus
     const startTime = new Date(`${selectedDate}T${selectedTime}`)
-    const endTime = new Date(startTime.getTime() + selectedDuration * 60000)
+    const endTime = new Date(startTime.getTime() + finalDuration * 60000) // Date de fin augmentée de la durée totale (Base + Bonus)
 
     const hasConflict = reservations?.some((res: any) => {
       if (res.station_id !== selectedStation || res.status === 'annulé') return false;
@@ -75,22 +123,77 @@ export function Reservation() {
     }
 
     try {
+      // 1. Créer la réservation avec enregistrement du bonus appliqué
       await createReservation.mutateAsync({
         station_id: selectedStation,
         start_time: startTime.toISOString(),
         end_time: endTime.toISOString(),
         display_name: metadata?.display_name || user?.email || 'Gamer',
-        status: 'pending'
+        status: 'pending',
+        bonus_minutes_applied: privilegeMinutesBonus // Transmission de la valeur numérique du bonus
       })
-      setShowSuccessModal(true); // MODIFIÉ : Ouvre la modale de réussite
+
+      // 2. Si un bonus a été appliqué, envoyer automatiquement les deux notifications
+      if (privilegeMinutesBonus > 0) {
+        const displayName = metadata?.display_name || 'Gamer'
+
+        // A. Notification pour le joueur
+        await supabase.from('notifications').insert([{
+          user_id: user.id,
+          message: `Félicitations ! Vos +${privilegeMinutesBonus} min de privilège de Rang ont été automatiquement ajoutées à votre session sur ${selectedStation}.`
+        }])
+
+        // B. Notification pour l'administrateur
+        const { data: admins } = await supabase
+          .from('users_metadata')
+          .select('user_id')
+          .eq('is_admin', true)
+
+        if (admins && admins.length > 0) {
+          const adminNotifs = admins.map(admin => ({
+            user_id: admin.user_id,
+            message: `Le joueur @${displayName} a bénéficié de +${privilegeMinutesBonus} min de privilège automatique sur sa session (${selectedStation}).`
+          }))
+          await supabase.from('notifications').insert(adminNotifs)
+        }
+      }
+
+      setShowSuccessModal(true);
     } catch (error: any) {
       console.error("Détails de l'erreur de réservation :", error);
-      toast.error(`Erreur de réservation : ${error.message || error}`); // MODIFIÉ (Affiche l'erreur exacte)
+      toast.error(`Erreur de réservation : ${error.message || error}`);
     }
   }
 
+  const onboardingSteps: OnboardingStep[] = [
+    {
+      title: "Prendre votre réservation",
+      desc: "Sélectionnez votre console directement sur notre plan tactique (Ligne Nord ou Sud) et choisissez votre heure de début et votre date.",
+      icon: <Map size={28} />
+    },
+    {
+      title: "Application des privilèges",
+      desc: "Vos minutes gratuites hebdomadaires (selon votre Rang actuel) sont calculées et créditées d'office sur votre ticket de réservation.",
+      icon: <CalendarDays size={28} />
+    }
+  ]
+
+  const adminOnboardingSteps: AdminOnboardingStep[] = [
+    {
+      title: "Verrouillage de Console",
+      desc: "Cliquez sur 'Bloquer' sous un poste pour éteindre/bloquer une console (maintenance, nettoyage). Cliquez sur 'Libérer' pour la remettre disponible.",
+      icon: <Power size={28} />
+    }
+  ]
+
   return (
-    <div className="pt-40 pb-24 min-h-screen bg-background text-center relative overflow-hidden animate-fade-in">
+    <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen bg-background text-center relative overflow-hidden animate-fade-in">
+      {/* GUIDE DU JOUEUR */}
+      <OnboardingModal pageKey="reservation" steps={onboardingSteps} />
+
+      {/* GUIDE DU GÉRANT (AJOUTÉ) */}
+      {isAdmin && <AdminOnboardingModal pageKey="reservation" steps={adminOnboardingSteps} />}
+      
       {/* Fond d'écran immersif de la page */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background z-10" />
@@ -116,80 +219,215 @@ export function Reservation() {
             
             <div className="lg:col-span-2 space-y-12">
               
-              {/* SECTION SÉLECTION POSTE (TOUJOURS VISIBLE) */}
-              <section>
-                <div className={cn("flex items-center mb-8", isAdmin ? "justify-center" : "justify-between")}>
+              {/* NOUVELLE CARTE TACTIQUE INTERACTIVE (ÎLOTS DE JEU E-SPORT) */}
+              <section className="space-y-8 animate-fade-in text-left">
+                <div className={cn("flex items-center mb-6", isAdmin ? "justify-center" : "justify-between")}>
                   <div className="flex items-center gap-3">
-                    <Monitor className="text-primary" />
-                    <h2 className="text-2xl font-display uppercase tracking-wider text-white text-center">
-                      {isAdmin ? 'État des Stations du Hub' : 'Sélectionner un poste'}
+                    <Monitor className="text-secondary animate-pulse" />
+                    <h2 className="text-2xl font-display uppercase tracking-wider text-white">
+                      {isAdmin ? 'Centre de Contrôle Tactique' : 'Aménagement du Sanctuary'}
                     </h2>
                   </div>
                   {isAdmin && (
                     <span className="text-[10px] font-black uppercase tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-full border border-primary/20 animate-pulse">
-                      Mode Administrateur
+                      Console Administrateur
                     </span>
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                  {stations.map((station) => {
-                    const isManuallyOccupied = manualStates?.find(s => s.station_id === station.id)?.is_manual_occupied;
-                    const isAutoOccupied = occupiedStations?.includes(station.id);
-                    const isOccupied = isAutoOccupied || isManuallyOccupied;
+                {/* Le Plan du Salon Virtuel (Disposé en 2 Îlots avec l'image PS5.jpg trés visible et le texte en bas) */}
+                <div className="glass p-6 md:p-8 rounded-[2.5rem] border-white/5 relative overflow-hidden bg-black/40">
+                  {/* Effet de lueur centrale symbolisant le cœur du Sanctuary */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-12 bg-secondary/5 rounded-full blur-3xl pointer-events-none" />
 
-                    return (
-                      <div key={station.id} className="flex flex-col gap-2">
-                        <button
-                          onClick={() => !isAdmin && !isOccupied && setSelectedStation(station.id)}
-                          disabled={!isAdmin && isOccupied}
-                          className={cn(
-                            'w-full aspect-square rounded-xl glass border-white/5 p-4 flex flex-col items-center justify-center gap-3 transition-all relative overflow-hidden',
-                            !isAdmin && selectedStation === station.id && 'border-primary bg-primary/10 shadow-neon-violet',
-                            isOccupied && 'border-orange-500/50 bg-orange-500/5'
-                          )}
-                        >
-                          <div className={cn(
-                            "absolute top-3 right-3 w-2.5 h-2.5 rounded-full",
-                            isOccupied ? "bg-orange-500 animate-pulse shadow-[0_0_8px_#f97316]" : "bg-green-500 shadow-[0_0_8px_#22c55e]"
-                          )} />
-
-                          <div className={cn(
-                            'w-12 h-12 rounded-lg bg-white/5 flex items-center justify-center transition-colors',
-                            !isAdmin && selectedStation === station.id && 'bg-primary/20 text-primary',
-                            isOccupied && 'text-orange-500'
-                          )}>
-                            <Monitor size={24} />
-                          </div>
-                          <span className={cn(
-                            "text-[10px] font-display font-black uppercase tracking-widest",
-                            isOccupied ? "text-orange-500" : "text-white/60"
-                          )}>
-                            {isOccupied ? (isManuallyOccupied ? 'BLOQUÉ' : 'OCCUPÉ') : station.name}
-                          </span>
-                        </button>
-
-                        {/* --- ACTIONS ADMIN (Affichées en dessous de chaque station) --- */}
-                        {isAdmin && (
-                          <div className="flex flex-col gap-1.5 mt-1 animate-fade-in">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); toggleStation.mutate({ id: station.id, status: true }) }}
-                              className="w-full flex items-center justify-center gap-2 text-[9px] font-black uppercase bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-500 transition-all shadow-md"
-                            >
-                              <PowerOff size={10} /> Bloquer
-                            </button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); toggleStation.mutate({ id: station.id, status: false }) }}
-                              className="w-full flex items-center justify-center gap-2 text-[9px] font-black uppercase bg-green-600 text-white py-2 rounded-lg hover:bg-green-500 transition-all shadow-md"
-                            >
-                              <Power size={10} /> Libérer
-                            </button>
-                          </div>
-                        )}
+                  <div className="space-y-8">
+                    
+                    {/* ÎLOT 1 : LIGNE NORD (Postes 1 à 5) */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center px-2">
+                        <span className="text-[9px] font-black uppercase text-white/40 tracking-[0.25em]">🎮 ÎLOT NORD — POSTES 1 À 5</span>
+                        <div className="h-[1px] flex-1 bg-white/5 ml-4" />
                       </div>
-                    )
-                  })}
+
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                        {stations.slice(0, 5).map((station) => {
+                          const isManuallyOccupied = manualStates?.find(s => s.station_id === station.id)?.is_manual_occupied;
+                          const isAutoOccupied = occupiedStations?.includes(station.id);
+                          const isOccupied = isAutoOccupied || isManuallyOccupied;
+                          const isCurrentSelected = !isAdmin && selectedStation === station.id;
+
+                          return (
+                            <div key={station.id} className="flex flex-col gap-2">
+                              <button
+                                onClick={() => !isAdmin && !isOccupied && setSelectedStation(station.id)}
+                                disabled={!isAdmin && isOccupied}
+                                className={cn(
+                                  'w-full aspect-[4/3] sm:aspect-square rounded-2xl glass border-white/5 p-4 flex flex-col justify-end transition-all relative overflow-hidden group',
+                                  isCurrentSelected && 'border-secondary bg-secondary/10 shadow-[0_0_15px_rgba(6,182,212,0.3)]',
+                                  isOccupied && 'border-orange-500/30 bg-orange-500/5'
+                                )}
+                              >
+                                {/* IMAGE DE FOND PS5 TRÈS VISIBLE */}
+                                <div className="absolute inset-0 z-0">
+                                  <img 
+                                    src="/PS5.jpg" 
+                                    className={cn(
+                                      "w-full h-full object-cover transition-all duration-500",
+                                      isCurrentSelected ? "scale-105 opacity-100" : (isOccupied ? "opacity-45" : "opacity-80 group-hover:scale-105 group-hover:opacity-100")
+                                    )} 
+                                    alt="PS5 Setup" 
+                                  />
+                                  {/* Dégradé noir uniquement au bas pour protéger le texte */}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/10 to-transparent" />
+                                </div>
+
+                                {/* Voyant de disponibilité (En haut à droite) */}
+                                <div className={cn(
+                                  "absolute top-2.5 right-2.5 w-2 h-2 rounded-full z-10",
+                                  isOccupied ? "bg-orange-500 shadow-[0_0_8px_#f97316]" : "bg-green-500 shadow-[0_0_8px_#22c55e]"
+                                )} />
+
+                                {/* CONTENU TEXTUEL FIXÉ TOUT EN BAS */}
+                                <div className="absolute bottom-2.5 left-2 right-2 z-10 flex flex-col items-center">
+                                  <span className={cn(
+                                    "text-[13px] md:text-[14px] font-display font-black uppercase tracking-wider leading-none",
+                                    isOccupied ? "text-orange-500" : "text-white"
+                                  )}>
+                                    {station.id.replace('_', ' #')}
+                                  </span>
+                                  <span className="text-[7.5px] font-black text-white/50 uppercase tracking-widest leading-none mt-1">
+                                    {isOccupied ? (isManuallyOccupied ? 'BLOQUÉ' : 'OCCUPÉ') : 'DISPO'}
+                                  </span>
+                                </div>
+                              </button>
+
+                              {/* COMMANDES ADMIN RAPIDES */}
+                              {isAdmin && (
+                                <div className="flex flex-col gap-1 mt-1 animate-fade-in relative z-20">
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); toggleStation.mutate({ id: station.id, status: true }) }}
+                                    className="w-full flex items-center justify-center gap-1.5 text-[8px] font-black uppercase bg-orange-600/90 hover:bg-orange-500 text-white py-1.5 rounded-lg transition-all"
+                                  >
+                                    Bloquer
+                                  </button>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); toggleStation.mutate({ id: station.id, status: false }) }}
+                                    className="w-full flex items-center justify-center gap-1.5 text-[8px] font-black uppercase bg-green-600/90 hover:bg-green-500 text-white py-1.5 rounded-lg transition-all"
+                                  >
+                                    Libérer
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    {/* CORRIDOR CENTRAL VISUEL */}
+                    <div className="flex items-center justify-center py-1 opacity-25">
+                      <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-secondary/40 to-transparent" />
+                    </div>
+
+                    {/* ÎLOT 2 : LIGNE SUD (Postes 6 à 10) */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center px-2">
+                        <span className="text-[9px] font-black uppercase text-white/40 tracking-[0.25em]">🎮 ÎLOT SUD — POSTES 6 À 10</span>
+                        <div className="h-[1px] flex-1 bg-white/5 ml-4" />
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                        {stations.slice(5, 10).map((station) => {
+                          const isManuallyOccupied = manualStates?.find(s => s.station_id === station.id)?.is_manual_occupied;
+                          const isAutoOccupied = occupiedStations?.includes(station.id);
+                          const isOccupied = isAutoOccupied || isManuallyOccupied;
+                          const isCurrentSelected = !isAdmin && selectedStation === station.id;
+
+                          return (
+                            <div key={station.id} className="flex flex-col gap-2">
+                              <button
+                                onClick={() => !isAdmin && !isOccupied && setSelectedStation(station.id)}
+                                disabled={!isAdmin && isOccupied}
+                                className={cn(
+                                  'w-full aspect-[4/3] sm:aspect-square rounded-2xl glass border-white/5 p-4 flex flex-col justify-end transition-all relative overflow-hidden group',
+                                  isCurrentSelected && 'border-secondary bg-secondary/10 shadow-[0_0_15px_rgba(6,182,212,0.3)]',
+                                  isOccupied && 'border-orange-500/30 bg-orange-500/5'
+                                )}
+                              >
+                                {/* IMAGE DE FOND PS5 TRÈS VISIBLE */}
+                                <div className="absolute inset-0 z-0">
+                                  <img 
+                                    src="/PS5.jpg" 
+                                    className={cn(
+                                      "w-full h-full object-cover transition-all duration-500",
+                                      isCurrentSelected ? "scale-105 opacity-100" : (isOccupied ? "opacity-45" : "opacity-80 group-hover:scale-105 group-hover:opacity-100")
+                                    )} 
+                                    alt="PS5 Setup" 
+                                  />
+                                  {/* Dégradé noir uniquement au bas pour protéger le texte */}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/10 to-transparent" />
+                                </div>
+
+                                {/* Voyant de disponibilité (En haut à droite) */}
+                                <div className={cn(
+                                  "absolute top-2.5 right-2.5 w-2 h-2 rounded-full z-10",
+                                  isOccupied ? "bg-orange-500 shadow-[0_0_8px_#f97316]" : "bg-green-500 shadow-[0_0_8px_#22c55e]"
+                                )} />
+
+                                {/* CONTENU TEXTUEL FIXÉ TOUT EN BAS */}
+                                <div className="absolute bottom-2.5 left-2 right-2 z-10 flex flex-col items-center">
+                                  <span className={cn(
+                                    "text-[13px] md:text-[14px] font-display font-black uppercase tracking-wider leading-none",
+                                    isOccupied ? "text-orange-500" : "text-white"
+                                  )}>
+                                    {station.id.replace('_', ' #')}
+                                  </span>
+                                  <span className="text-[7.5px] font-black text-white/50 uppercase tracking-widest leading-none mt-1">
+                                    {isOccupied ? (isManuallyOccupied ? 'BLOQUÉ' : 'OCCUPÉ') : 'DISPO'}
+                                  </span>
+                                </div>
+                              </button>
+
+                              {/* COMMANDES ADMIN RAPIDES */}
+                              {isAdmin && (
+                                <div className="flex flex-col gap-1 mt-1 animate-fade-in relative z-20">
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); toggleStation.mutate({ id: station.id, status: true }) }}
+                                    className="w-full flex items-center justify-center gap-1.5 text-[8px] font-black uppercase bg-orange-600/90 hover:bg-orange-500 text-white py-1.5 rounded-lg transition-all"
+                                  >
+                                    Bloquer
+                                  </button>
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); toggleStation.mutate({ id: station.id, status: false }) }}
+                                    className="w-full flex items-center justify-center gap-1.5 text-[8px] font-black uppercase bg-green-600/90 hover:bg-green-500 text-white py-1.5 rounded-lg transition-all"
+                                  >
+                                    Libérer
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
+
+                {/* PANNEAU DE DIAGNOSTIC DE POSTE ACTIF (Pour le look technique épuré) */}
+                {selectedStation && !isAdmin && (
+                  <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/5 flex items-center justify-between animate-fade-in">
+                    <div>
+                      <p className="text-[9px] uppercase font-black text-white/40 tracking-wider">CONSOLE SÉLECTIONNÉE :</p>
+                      <h4 className="text-lg font-black uppercase text-secondary tracking-wide">
+                        💻 CONSOLE {selectedStation.replace('_', ' #')}
+                      </h4>
+                    </div>
+                    <span className="text-[8px] font-black uppercase tracking-widest px-3 py-1.5 rounded bg-green-500/10 text-green-500 border border-green-500/20">
+                      ⚡ Équipement PS5 Pro opérationnel
+                    </span>
+                  </div>
+                )}
               </section>
 
               {/* --- SECTION CACHÉE POUR L'ADMIN --- */}
@@ -201,19 +439,27 @@ export function Reservation() {
                       <h2 className="text-2xl font-display uppercase tracking-wider text-white">Durée & Tarif</h2>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                      {DURATIONS.map((dur) => (
-                        <button
-                          key={dur.value}
-                          onClick={() => { setSelectedDuration(dur.value); setTotalPrice(dur.price); }}
-                          className={cn(
-                            'py-4 px-2 rounded-xl glass border-white/5 flex flex-col items-center gap-2 transition-all',
-                            selectedDuration === dur.value && 'border-secondary bg-secondary/10 shadow-neon-cyan'
-                          )}
-                        >
-                          <span className="text-sm font-bold text-white uppercase">{dur.label}</span>
-                          <span className="text-[9px] font-black uppercase text-muted-foreground">{dur.price} FCFA</span>
-                        </button>
-                      ))}
+                      {DURATIONS.map((dur) => {
+                        const isLegendPack = dur.label.includes("Pack Légende")
+                        const isLocked = isLegendPack && userRank.name !== 'Légende' && userRank.name !== 'Iconique' && userRank.name !== 'Divin'
+
+                        return (
+                          <button
+                            key={dur.value}
+                            disabled={isLocked}
+                            onClick={() => { if(!isLocked) { setSelectedDuration(dur.value); setTotalPrice(dur.price); } }}
+                            className={cn(
+                              'py-4 px-2 rounded-xl glass border-white/5 flex flex-col items-center gap-2 transition-all relative',
+                              selectedDuration === dur.value && 'border-secondary bg-secondary/10 shadow-neon-cyan',
+                              isLocked && 'opacity-40 cursor-not-allowed border-red-500/10'
+                            )}
+                          >
+                            {isLocked && <Lock className="absolute top-2 right-2 text-red-500" size={12} />}
+                            <span className="text-sm font-bold text-white uppercase">{dur.label}</span>
+                            <span className="text-[9px] font-black uppercase text-muted-foreground">{dur.price} FCFA</span>
+                          </button>
+                        )
+                      })}
                     </div>
                   </section>
 
@@ -237,6 +483,14 @@ export function Reservation() {
                 // A. BARRE DU JOUEUR (TICKET)
                 <div className="glass border-white/10 rounded-3xl p-8 sticky top-32 shadow-2xl">
                   <h3 className="text-xl font-display font-black uppercase tracking-widest mb-8 pb-4 border-b border-white/5 text-center text-white">VOTRE TICKET</h3>
+                  
+                  {/* AFFICHAGE DU PRIVILÈGE APPLIQUÉ (AJOUTÉ) */}
+                  {privilegeMinutesBonus > 0 && (
+                    <div className="bg-primary/10 border border-primary/20 p-3 rounded-xl text-[10px] font-black uppercase text-primary tracking-wider animate-pulse mb-6">
+                      {privilegeAppliedLabel}
+                    </div>
+                  )}
+
                   <div className="space-y-6 mb-12">
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground uppercase font-black tracking-widest text-[10px]">Poste</span>

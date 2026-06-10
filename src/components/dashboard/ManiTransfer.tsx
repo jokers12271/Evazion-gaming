@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/useAuth'
 import { useManiTransfer } from '@/hooks/useManiTransfer'
@@ -13,56 +13,73 @@ interface Props {
   boxStyle: any
 }
 
+interface Gamer {
+  user_id: string
+  display_name: string
+  is_admin?: boolean | null // AJOUTÉ : Support de la détection admin
+}
+
 export function ManiTransfer({ boxClass, boxStyle }: Props) {
   const { user } = useAuth()
   const { transferMani } = useManiTransfer()
-  const [receiverId, setReceiverId] = useState('')
-  const [amount, setAmount] = useState<number | ''>('')
-
-  // MODIFIÉ : Chargement robuste des joueurs (prend en charge les valeurs de colonnes NULL)
-  const { data: gamers, isLoading } = useQuery({
+  const queryClient = useQueryClient()
+  
+  // MODIFIÉ : Chargement robuste depuis la table réelle 'users_metadata' (et non 'gamers')
+  const { data: gamersData, isLoading } = useQuery<Gamer[], Error>({
     queryKey: ['available_transfer_gamers'],
     queryFn: async () => {
-      // On récupère l'ensemble des profils sans filtre SQL restrictif
+      // Charger tous les profils de la base
       const { data, error } = await supabase
         .from('users_metadata')
-        .select('user_id, display_name, is_admin');
-      
+        .select('user_id, display_name, is_admin')
+
       if (error) throw error;
 
-      // Filtrage JS robuste : Exclure soi-même et tout compte marqué Admin (gère is_admin = true, false ou null)
-      return (data || []).filter(g => g.user_id !== user?.id && g.is_admin !== true);
+      // Filtrer en JS : Exclure soi-même et les comptes admins (gère true, false et null)
+      return (data || []).filter(g => g.user_id !== user?.id && g.is_admin !== true) as Gamer[];
     },
     enabled: !!user
-  });
+  })
+
+  const gamers = gamersData ?? []
+  const [receiverId, setReceiverId] = useState('')
+  const [amount, setAmount] = useState<number | ''>('')
+  const [transferSuccess, setTransferSuccess] = useState<{ amount: number, receiverName: string } | null>(null) // AJOUTÉ
 
   const handleTransferSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!receiverId) return toast.error("Veuillez sélectionner un destinataire.", { position: "bottom-center" });
     if (!amount || amount <= 0) return toast.error("Veuillez saisir un montant de MANI valide.", { position: "bottom-center" });
 
-    const targetGamer = gamers?.find(g => g.user_id === receiverId);
+    const targetGamer = (Array.isArray(gamers) ? gamers : []).find(g => g.user_id === receiverId);
     if (!confirm(`Confirmer le transfert de ${amount} MANI à @${targetGamer?.display_name} ?`)) return;
 
     try {
+      // 1. Transaction atomique en base
       await transferMani.mutateAsync({ receiverId, amount: Number(amount) });
-      toast.success(`Transfert de ${amount} MANI effectué !`, {
-        position: "bottom-center",
-        style: {
-          background: '#040405',
-          color: '#ffffff',
-          border: '2px solid hsl(180, 100%, 50%)', // Bordure Néon Cyan
-          borderRadius: '1rem',
-          boxShadow: '0 0 15px hsl(180, 100%, 50%, 0.4)',
-          fontSize: '11px',
-          fontWeight: '900',
-          textTransform: 'uppercase',
-          letterSpacing: '0.15em',
-          padding: '12px 24px'
-        }
+      
+      const displayName = user?.user_metadata?.display_name || 'Gamer'
+
+      // 2. Notification d'alerte pour le donateur (Expéditeur)
+      await supabase.from('notifications').insert([{
+        user_id: user?.id,
+        message: `Vous avez envoyé ${amount} MANI au joueur @${targetGamer?.display_name}.`
+      }])
+
+      // 3. Notification d'alerte pour le bénéficiaire (Récepteur)
+      await supabase.from('notifications').insert([{
+        user_id: receiverId,
+        message: `Vous avez reçu ${amount} MANI de la part de @${displayName}.`
+      }])
+
+      setTransferSuccess({
+        amount: Number(amount),
+        receiverName: targetGamer?.display_name || 'Gamer'
       });
+
       setReceiverId('');
       setAmount('');
+      queryClient.invalidateQueries({ queryKey: ['unified_transfers_history'] });
     } catch (err: any) {
       console.error(err);
       toast.error(`Échec du transfert : ${err.message || err}`, { position: "bottom-center" });
@@ -120,6 +137,37 @@ export function ManiTransfer({ boxClass, boxStyle }: Props) {
           </NeonButton>
         </form>
       )}
+
+      {/* Pop-up centré de confirmation de réussite de transfert de MANI */}
+      {transferSuccess && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
+          <div className="glass p-10 rounded-[3rem] border-2 border-secondary shadow-neon-cyan max-w-md w-full relative overflow-hidden" style={{ borderColor: 'var(--secondary)' }}>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-secondary/10 rounded-full blur-3xl pointer-events-none" />
+            
+            <div className="w-16 h-16 bg-secondary/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-secondary/30">
+              <Send className="text-secondary animate-pulse" size={32} />
+            </div>
+
+            <h3 className="text-2xl font-black uppercase mb-2 tracking-tight text-secondary text-glow-cyan">Transfert Réussi !</h3>
+            <p className="text-[10px] uppercase font-black tracking-widest text-white/40 mb-6">Envoi de Jetons</p>
+
+            <div className="bg-black/50 border border-white/5 rounded-3xl p-6 mb-8 text-center backdrop-blur-sm">
+              <p className="text-xs font-bold italic text-white/80 leading-relaxed">
+                "Vous avez transféré avec succès <span className="text-secondary font-black">{transferSuccess.amount} MANI</span> au joueur <span className="text-secondary font-black" translate="no">@{transferSuccess.receiverName}</span>."
+              </p>
+            </div>
+
+            <NeonButton 
+              variant="cyan"
+              className="w-full py-4 text-xs font-black shadow-neon-cyan"
+              onClick={() => setTransferSuccess(null)}
+            >
+              Fermer
+            </NeonButton>
+          </div>
+        </div>
+      )}
+
     </section>
   )
 }

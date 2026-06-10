@@ -12,18 +12,32 @@ export function FaceToFaceAdmin() {
   const [player2Id, setPlayer2Id] = useState('')
   const recordMatch = useRecordMatch()
 
-  // Charger les joueurs approuvés de cette team spécifique uniquement
+  // MODIFIÉ : Chargement robuste des combattants approuvés (gère les colonnes de valeurs NULL)
   const { data: teamMembers, isLoading } = useQuery({
     queryKey: ['admin_faceoff_members', selectedTeam],
     queryFn: async () => {
+      if (!selectedTeam) return []
+      
+      // Interroger directement la table d'adhésion pour simplifier la jointure
       const { data, error } = await supabase
-        .from('users_metadata')
-        .select('user_id, display_name, team_membership_requests!inner(team_id, status)')
-        .eq('team_membership_requests.team_id', selectedTeam)
-        .eq('team_membership_requests.status', 'approved')
-        .eq('is_admin', false);
+        .from('team_membership_requests')
+        .select('user_id, team_id, status, users_metadata(display_name, is_admin)')
+        .eq('team_id', selectedTeam)
+        .eq('status', 'approved');
+
       if (error) throw error;
-      return data || [];
+
+      // Décoder les profils et filtrer en JS (exclure les admins, gère is_admin = true, false ou null)
+      return (data || [])
+        .map((row: any) => {
+          const profile = Array.isArray(row.users_metadata) ? row.users_metadata[0] : row.users_metadata;
+          return {
+            user_id: row.user_id,
+            display_name: profile?.display_name || 'Gamer',
+            is_admin: profile?.is_admin
+          };
+        })
+        .filter(g => g.is_admin !== true); // Exclure uniquement les administrateurs
     }
   })
 

@@ -2,25 +2,43 @@ import { useState } from 'react'
 import BarcodeScannerComponent from 'react-qr-barcode-scanner'
 import { useNavigate } from '@tanstack/react-router'
 import { X, Camera, ShieldCheck } from 'lucide-react'
-import { useAuth } from '@/hooks/useAuth' // AJOUTÉ
-import { useUserMetadata, useUpdatePresence } from '@/hooks/useUserMetadata' // AJOUTÉ
-import { toast } from 'react-hot-toast' // AJOUTÉ
+import { useAuth } from '@/hooks/useAuth'
+import { useUserMetadata, useUpdatePresence } from '@/hooks/useUserMetadata'
+import { toast } from 'react-hot-toast'
 
 export function Scanner() {
   const navigate = useNavigate()
-  const { user } = useAuth() // AJOUTÉ
-  const { data: metadata } = useUserMetadata() // AJOUTÉ
-  const updatePresenceMutation = useUpdatePresence() // AJOUTÉ
+  const { user } = useAuth()
+  const { data: metadata } = useUserMetadata()
+  const updatePresenceMutation = useUpdatePresence()
   const [stopStream, setStopStream] = useState(false)
 
   const isAdmin = metadata?.is_admin || false;
 
-  // AJOUTÉ : Logique de routage dynamique du scan
   const handleScanUpdate = async (scannedText: string) => {
+    // 1. Désactiver temporairement le flux pour éviter les lectures en boucle
     setStopStream(true);
 
-    if (scannedText === 'EVAZION_ENTREE') {
-      // 1. SCAN D'ENTRÉE SALLE PAR LE JOUEUR
+    // 2. AFFICHER UN TOAST DE DIAGNOSTIC EN DIRECT (INDISPENSABLE POUR VOS TESTS)
+    toast(`🔍 Code détecté : "${scannedText}"`, { 
+      position: "top-center",
+      duration: 3000,
+      icon: '🔎'
+    });
+
+    // 3. NETTOYAGE INTELLIGENT DU TEXTE (Minuscules, accents, espaces)
+    const cleanText = scannedText
+      .trim()
+      .toUpperCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // Supprime les accents (é -> E)
+      .replace(/[\s-]/g, "_");         // Remplace les espaces et tirets par des tirets du bas _
+
+    // 4. ROUTAGE DYNAMIQUE ROBUSTE (Tolère Evazion, Evasion et Evacuation)
+    const isEntryCode = cleanText === 'EVAZION_ENTREE' || cleanText === 'EVASION_ENTREE' || cleanText === 'EVACUATION_ENTREE';
+    const isExitCode = cleanText === 'EVAZION_SORTIE' || cleanText === 'EVASION_SORTIE' || cleanText === 'EVACUATION_SORTIE';
+
+    if (isEntryCode) {
       if (!user) {
         toast.error("Veuillez vous connecter pour valider votre entrée", { position: "bottom-center" });
         navigate({ to: '/login' });
@@ -34,7 +52,7 @@ export function Scanner() {
           style: {
             background: '#040405',
             color: '#ffffff',
-            border: '2px solid #22c55e', // Bordure verte
+            border: '2px solid #22c55e',
             borderRadius: '1rem',
             boxShadow: '0 0 15px rgba(34, 197, 94, 0.4)',
             fontSize: '11px',
@@ -50,8 +68,7 @@ export function Scanner() {
         setStopStream(false);
       }
 
-    } else if (scannedText === 'EVAZION_SORTIE') {
-      // 2. SCAN DE SORTIE SALLE PAR LE JOUEUR
+    } else if (isExitCode) {
       if (!user) {
         toast.error("Veuillez vous connecter", { position: "bottom-center" });
         navigate({ to: '/login' });
@@ -65,7 +82,7 @@ export function Scanner() {
           style: {
             background: '#040405',
             color: '#ffffff',
-            border: '2px solid #ef4444', // Bordure rouge
+            border: '2px solid #ef4444',
             borderRadius: '1rem',
             boxShadow: '0 0 15px rgba(239, 68, 68, 0.4)',
             fontSize: '11px',
@@ -82,19 +99,20 @@ export function Scanner() {
       }
 
     } else {
-      // 3. SCAN DE CARTES DE MEMBRES (ADMIN SEULEMENT)
+      // 5. REDIRECTION CARTE DE MEMBRE (ADMIN SEULEMENT)
       if (isAdmin) {
+        toast.success("Carte de membre détectée. Redirection...");
         window.location.href = `/dashboard/player/${scannedText}`;
       } else {
-        toast.error("Code QR non reconnu ou réservé à l'administration", { position: "bottom-center" });
-        setStopStream(false);
+        toast.error("Code non reconnu ou réservé à l'administration.", { position: "bottom-center" });
+        // Réactiver le flux de caméra après 2 secondes si le code est inconnu
+        setTimeout(() => setStopStream(false), 2000);
       }
     }
   }
 
   return (
     <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 animate-fade-in">
-      {/* Bouton pour fermer et revenir au Dashboard */}
       <button 
         onClick={() => navigate({ to: '/dashboard' })} 
         className="absolute top-10 right-10 text-white/50 hover:text-white transition-colors"
@@ -110,7 +128,6 @@ export function Scanner() {
         <p className="text-cyan-500/60 text-[10px] font-black uppercase mt-2 tracking-[0.2em]">Pointez l'objectif vers un QR code d'accès ou de salle</p>
       </div>
 
-      {/* ZONE DE LA CAMÉRA */}
       <div className="relative w-full max-w-sm aspect-square rounded-[3rem] overflow-hidden border-4 border-cyan-500 shadow-[0_0_50px_rgba(6,182,212,0.3)] bg-black">
         <BarcodeScannerComponent
           width="100%"
@@ -123,7 +140,6 @@ export function Scanner() {
           }}
         />
         
-        {/* Viseur décoratif "Cyber" */}
         <div className="absolute inset-12 border-2 border-cyan-500/30 rounded-3xl border-dashed animate-pulse" />
         <div className="absolute top-0 left-0 w-full h-1 bg-cyan-500/50 shadow-neon-cyan animate-[scan_2s_linear_infinite]" />
       </div>

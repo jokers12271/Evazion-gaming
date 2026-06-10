@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useRewards, Reward } from '@/hooks/useRewards'
 import { useLoyalty } from '@/hooks/useLoyalty'
 import { useUserMetadata } from '@/hooks/useUserMetadata'
@@ -7,13 +8,28 @@ import { NeonButton } from '@/components/ui/NeonButton'
 import { Star, Loader2, ShoppingBag, Plus, X, Trash2, Edit2, ImageIcon } from 'lucide-react'
 import { cn } from '@blinkdotnew/ui'
 import { getRank } from '@/lib/ranks'
+import { supabase } from '@/lib/supabase'
 import { toast } from 'react-hot-toast'
+import { OnboardingModal, OnboardingStep } from '@/components/ui/OnboardingModal'
+import { Gift } from 'lucide-react'
+import { AdminOnboardingModal, AdminOnboardingStep } from '@/components/ui/AdminOnboardingModal'
+import { Edit } from 'lucide-react'
 
 export function Store() {
   const { user } = useAuth()
   const { data: loyalty } = useLoyalty()
   const { data: metadata } = useUserMetadata()
   const { rewards, addReward, updateReward, deleteReward, claimReward } = useRewards()
+  const { data: claims } = useQuery({
+    queryKey: ['reward_claims'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('reward_claims')
+        .select('*')
+      if (error) throw error
+      return data
+    }
+  })
 
   const isAdmin = (metadata as any)?.is_admin
   const points = loyalty?.points || 0
@@ -84,8 +100,40 @@ export function Store() {
     </div>
   )
 
+  const onboardingSteps: OnboardingStep[] = [
+    {
+      title: "La Boutique d'Evazion",
+      desc: "Dépensez vos jetons MANI accumulés en salle. Échangez-les contre des consommables (boissons, gâteaux) ou des privilèges d'arène virtuels.",
+      icon: <ShoppingBag size={28} />
+    },
+    {
+      title: "Récupération à l'Accueil",
+      desc: "Une fois votre échange en ligne validé, présentez-vous simplement à l'accueil du Sanctuaire pour récupérer vos consommables auprès du gérant.",
+      icon: <Gift size={28} />
+    }
+  ]
+
+  const adminOnboardingSteps: AdminOnboardingStep[] = [
+    {
+      title: "Gestionnaire d'Articles",
+      desc: "Utilisez le bouton 'Ajouter un article' pour publier de nouvelles boissons ou gâteaux. Vous pouvez modifier ou supprimer les articles d'un clic.",
+      icon: <Edit size={28} />
+    },
+    {
+      title: "Registre des Ventes",
+      desc: "Consultez en haut le nombre total d'articles vendus dans la salle. Dès qu'un joueur récupère son achat physique, cliquez sur la coche de livraison.",
+      icon: <ShoppingBag size={28} />
+    }
+  ]
+
   return (
-    <div className="pt-40 pb-24 min-h-screen bg-background text-center relative overflow-hidden animate-fade-in">
+    <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen bg-background text-center relative overflow-hidden animate-fade-in">
+      {/* GUIDE DU JOUEUR */}
+      <OnboardingModal pageKey="store" steps={onboardingSteps} />
+
+      {/* GUIDE DU GÉRANT (AJOUTÉ) */}
+      {isAdmin && <AdminOnboardingModal pageKey="store" steps={adminOnboardingSteps} />}
+      
       {/* Fond d'écran immersif de la page */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background z-10" />
@@ -102,23 +150,39 @@ export function Store() {
             EVAZION <span className="text-primary italic">STORE</span>
           </h1>
           
-          {/* LE SOLDE EST DÉSORMAIS MASQUÉ POUR L'ADMINISTRATEUR OU REQUALIFIÉ POUR VISITEUR ANONYME */}
+          {/* LE SOLDE / LOG DE VENTES MINIATURISÉ ET RÉACTIF SUR MOBILE (CORRIGÉ) */}
           {user ? (
-            !isAdmin && (
-              <div className="mt-8 inline-flex items-center gap-6 glass px-10 py-5 rounded-full border-white/5 shadow-2xl animate-fade-in">
-                <div className="flex items-baseline gap-4 font-display font-black uppercase tracking-widest text-white">
-                  <span className="text-3xl opacity-80">SOLDE =</span>
-                  <span className="text-5xl flex items-center gap-3" style={{ color: currentRank.color }}>
-                    {points}
-                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-primary shadow-neon-violet">
+            isAdmin ? (
+              /* A. VUE ADMIN : VENTES TOTALES */
+              <div className="mt-6 md:mt-8 inline-flex items-center gap-4 glass px-5 md:px-10 py-3 md:py-5 rounded-2xl md:rounded-full border-white/5 shadow-2xl animate-fade-in">
+                <div className="flex items-baseline gap-2 md:gap-4 font-display font-black uppercase tracking-widest text-white">
+                  <span className="text-xl md:text-3xl opacity-80">VENDU =</span>
+                  <span className="text-3xl md:text-5xl flex items-center gap-2 text-green-500">
+                    {claims?.filter((c: any) => c.status === 'livré').length || 0}
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-full overflow-hidden border-2 border-primary shadow-neon-violet shrink-0 relative">
                        <img src="/mani.jpg" alt="M" className="w-full h-full object-cover scale-110" />
+                       <div className="absolute inset-0 shadow-[inset_0_0_4px_rgba(0,0,0,0.8)] pointer-events-none" />
+                    </div>
+                  </span>
+                </div>
+              </div>
+            ) : (
+              /* B. VUE JOUEUR : SOLDE DE MANI */
+              <div className="mt-6 md:mt-8 inline-flex items-center gap-4 glass px-5 md:px-10 py-3 md:py-5 rounded-2xl md:rounded-full border-white/5 shadow-2xl animate-fade-in">
+                <div className="flex items-baseline gap-2 md:gap-4 font-display font-black uppercase tracking-widest text-white">
+                  <span className="text-xl md:text-3xl opacity-80">SOLDE =</span>
+                  <span className="text-3xl md:text-5xl flex items-center gap-2" style={{ color: currentRank.color }}>
+                    {points}
+                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-full overflow-hidden border-2 border-primary shadow-neon-violet shrink-0 relative">
+                       <img src="/mani.jpg" alt="M" className="w-full h-full object-cover scale-110" />
+                       <div className="absolute inset-0 shadow-[inset_0_0_4px_rgba(0,0,0,0.8)] pointer-events-none" />
                     </div>
                   </span>
                 </div>
               </div>
             )
           ) : (
-            <div className="mt-8 inline-flex items-center gap-6 glass px-8 py-4 rounded-full border-white/5 shadow-2xl animate-fade-in text-white/60 text-[10px] font-black uppercase tracking-widest">
+            <div className="mt-6 md:mt-8 inline-flex items-center gap-4 glass px-5 md:px-8 py-3 md:py-4 rounded-2xl md:rounded-full border-white/5 shadow-2xl animate-fade-in text-white/60 text-[8px] md:text-[10px] font-black uppercase tracking-widest">
               <span>Connectez-vous pour voir vos MANI et échanger des récompenses !</span>
             </div>
           )}
@@ -215,42 +279,45 @@ export function Store() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 text-left">
             {rewards.data?.map((item: any) => (
-              <div key={item.id} className="glass border-white/5 p-6 rounded-[2.5rem] flex flex-col relative overflow-hidden group hover:border-primary/30 transition-all duration-500">
+              /* CARTE D'ARTICLE : p-4 rounded-[1.75rem] sur mobile pour gagner de la place (CORRIGÉ) */
+              <div key={item.id} className="glass border-white/5 p-4 md:p-6 rounded-[1.75rem] md:rounded-[2.5rem] flex flex-col relative overflow-hidden group hover:border-primary/30 transition-all duration-500">
                 
                 {isAdmin && (
-                  <div className="absolute top-4 right-4 flex gap-2 z-20">
-                    <button onClick={() => handleEdit(item)} className="p-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500 hover:text-white transition-all backdrop-blur-md border border-blue-500/20"><Edit2 size={14}/></button>
-                    <button onClick={() => { if(confirm("Supprimer cet article ?")) deleteReward.mutate(item.id) }} className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-all backdrop-blur-md border border-red-500/20"><Trash2 size={14}/></button>
+                  <div className="absolute top-4 right-4 flex gap-1.5 z-20">
+                    <button onClick={() => handleEdit(item)} className="p-1.5 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500 hover:text-white transition-all border border-blue-500/20 shadow-lg"><Edit2 size={12}/></button>
+                    <button onClick={() => { if(confirm("Supprimer cet article ?")) deleteReward.mutate(item.id) }} className="p-1.5 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-all border border-red-500/20 shadow-lg"><Trash2 size={12}/></button>
                   </div>
                 )}
 
-                <div className="aspect-square rounded-3xl overflow-hidden mb-6 bg-white/5">
-                  <img src={item.image_url || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=400'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-80 group-hover:opacity-100" alt={item.name} />
+                {/* Cadre de l'image aminci sur mobile (mb-4 et coins rounded-2xl) */}
+                <div className="aspect-square rounded-2xl md:rounded-3xl overflow-hidden mb-4 md:mb-6 bg-white/5">
+                  <img src={item.image_url || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=400'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80 group-hover:opacity-100" alt={item.name} />
                 </div>
 
-                <div className="flex-1 px-2">
-                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-primary/60">{item.category}</span>
-                  <h3 className="text-2xl font-display font-black text-white mt-1 uppercase tracking-tighter leading-none">{item.name}</h3>
-                  <p className="text-xs text-muted-foreground mt-3 line-clamp-2 leading-relaxed font-medium">{item.description}</p>
+                {/* Infos textuelles de l'article miniaturisées réactivement */}
+                <div className="flex-1 px-1 text-left">
+                  <span className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.2em] text-primary/60">{item.category}</span>
+                  <h3 className="text-lg md:text-2xl font-display font-black text-white mt-1 uppercase tracking-tighter leading-none">{item.name}</h3>
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-2 md:mt-3 line-clamp-2 leading-relaxed font-medium">{item.description}</p>
                 </div>
 
-                <div className="mt-8 pt-6 border-t border-white/5 flex items-center justify-between px-2 text-white">
-                  {/* AJOUTÉ : Évaluation de la réduction globale en direct */}
+                {/* Bas de carte : mt-6 pt-4 pour réduire l'épaisseur verticale, boutons et prix affinés */}
+                <div className="mt-6 md:mt-8 pt-4 md:pt-6 border-t border-white/5 flex items-center justify-between px-1 text-white">
                   {(() => {
                     const hasGlobalDiscount = (metadata as any)?.discount_perk_until && new Date((metadata as any).discount_perk_until) > new Date();
                     const realCost = hasGlobalDiscount ? Math.round(item.mani_cost * 0.9) : item.mani_cost;
 
                     return (
                       <div className="flex flex-col text-left">
-                        <span className="text-[9px] font-black opacity-40 uppercase tracking-widest">Coût</span>
-                        <span className="text-2xl font-display font-black flex items-center gap-2">
+                        <span className="text-[8px] font-black opacity-40 uppercase tracking-widest leading-none">Coût</span>
+                        <span className="text-lg md:text-2xl font-display font-black flex items-center gap-1.5 mt-1">
                           {hasGlobalDiscount ? (
-                            <span className="flex items-center gap-2">
+                            <span className="flex items-center gap-1.5">
                               <span className="line-through opacity-30 text-xs">{item.mani_cost}</span>
                               <span className="text-secondary text-glow-cyan font-black">{realCost}</span>
                             </span>
                           ) : item.mani_cost} 
-                          <ManiIcon size="w-5 h-5" />
+                          <ManiIcon size="w-4 h-4 md:w-5 md:h-5" />
                         </span>
                       </div>
                     );
@@ -266,7 +333,7 @@ export function Store() {
                         handleBuy(item);
                       }
                     }}
-                    className="px-6 py-2 text-[10px] font-black tracking-widest uppercase"
+                    className="px-4 py-2.5 md:px-6 md:py-2 text-[9px] md:text-[10px] font-black tracking-widest uppercase shrink-0"
                   >
                     {isAdmin ? "MODE ADMIN" : (!user ? "ÉCHANGER" : (points >= item.mani_cost ? "ÉCHANGER" : "SOLDE BAS"))}
                   </NeonButton>

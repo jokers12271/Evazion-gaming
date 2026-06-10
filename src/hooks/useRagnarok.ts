@@ -22,7 +22,7 @@ export function useRagnarok() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
-  // 1. Lire mes défis actifs (en cours ou en attente)
+  // 1. Lire mes défis actifs (Avec masquage automatique à 48h des duels clos)
   const myChallenges = useQuery({
     queryKey: ['ragnarok_challenges', user?.id],
     queryFn: async () => {
@@ -31,59 +31,111 @@ export function useRagnarok() {
         .from('ragnarok_challenges')
         .select(`
           *,
-          challenger_metadata:challenger_id ( display_name, avatar_url, community_team ),
-          challenged_metadata:challenged_id ( display_name, avatar_url, community_team )
+          challenger_metadata:users_metadata!challenger_id ( display_name, avatar_url, community_team ),
+          challenged_metadata:users_metadata!challenged_id ( display_name, avatar_url, community_team )
         `)
         .or(`challenger_id.eq.${user.id},challenged_id.eq.${user.id}`)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      return data as Challenge[]
+
+      // Appliquer le masquage de 48 heures pour les défis terminés ou annulés
+      const now = new Date();
+      const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+      return (data || []).filter((c: any) => {
+        // Toujours afficher si le défi est actif ou en attente
+        if (c.status === 'pending' || c.status === 'active') {
+          return true;
+        }
+        const createdAt = new Date(c.created_at);
+        return createdAt >= fortyEightHoursAgo;
+      });
     },
     enabled: !!user,
-    refetchInterval: 10000 // Actualisation temps réel pour voir les Fight/Fuir
+    refetchInterval: 10000 
   })
 
-  // 2. Créer (lancer) un défi Ragnarok
+  // 2. MODIFIÉ : Créer (lancer) un défi Ragnarok (Avec enregistrement de l'arène de la Team pour les victoires mensuelles)
   const createChallenge = useMutation({
-    mutationFn: async ({ challengedId, currencyType, amount, scheduledAt }: {
+    mutationFn: async ({ challengedId, currencyType, amount, scheduledAt, teamId }: {
       challengedId: string,
       currencyType: 'MANI' | 'Hours',
       amount: number,
-      scheduledAt: string
+      scheduledAt: string,
+      teamId: string // AJOUTÉ
     }) => {
       if (!user) throw new Error("Vous devez être connecté.")
 
-      // A. Récupérer mes métadonnées (Challenger)
-      const { data: challengerMeta } = await supabase
+      // A. Récupérer les métadonnées de profil du Challenger (Moi)
+      const { data: challengerMeta, error: cMetaErr } = await supabase
         .from('users_metadata')
-        .select('*, loyalty_points(total_hours)')
+        .select('*')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle()
 
-      // B. Récupérer les métadonnées du défié (Challenged)
-      const { data: challengedMeta } = await supabase
+      if (cMetaErr) throw cMetaErr;
+
+      // B. Récupérer séparément les heures réelles du Challenger
+      const { data: challengerLp, error: cLpErr } = await supabase
+        .from('loyalty_points')
+        .select('total_hours')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (cLpErr) throw cLpErr;
+
+      // C. Récupérer les métadonnées de profil du défié (Challenged)
+      const { data: challengedMeta, error: dMetaErr } = await supabase
         .from('users_metadata')
-        .select('*, loyalty_points(total_hours)')
+        .select('*')
         .eq('user_id', challengedId)
-        .single()
+        .maybeSingle()
 
-      if (!challengerMeta || !challengedMeta) throw new Error("Profils introuvables.")
+      if (dMetaErr) throw dMetaErr;
 
-      // RÈGLE 2 : Seul ceux qui sont dans une communauté (Team) peuvent défier
-      if (!challengerMeta.community_team) {
-        throw new Error("Vous devez d'abord rejoindre une Team pour lancer un défi.")
+      // D. Récupérer séparément les heures réelles du défié
+      const { data: challengedLp, error: dLpErr } = await supabase
+        .from('loyalty_points')
+        .select('total_hours')
+        .eq('user_id', challengedId)
+        .maybeSingle()
+
+      if (dLpErr) throw dLpErr;
+
+      if (!challengerMeta || !challengedMeta) {
+        throw new Error("Profils de joueurs introuvables.");
       }
 
-      // RÈGLE 3 : Un joueur ne peut défier que celui qui est dans la même TEAM que lui
-      if (challengerMeta.community_team !== challengedMeta.community_team) {
-        throw new Error("Vous ne pouvez défier que des joueurs de votre propre Team.")
+      // E. Vérifier la conformité de l'équipe (Multi-teams 3 Max)
+      // Charger les teams approuvées de chaque joueur
+      const { data: challengerTeams } = await supabase
+        .from('team_membership_requests')
+        .select('team_id')
+        .eq('user_id', user.id)
+        .eq('status', 'approved');
+
+      const { data: challengedTeams } = await supabase
+        .from('team_membership_requests')
+        .select('team_id')
+        .eq('user_id', challengedId)
+        .eq('status', 'approved');
+
+      const challengerTeamList = challengerTeams?.map(t => t.team_id) || [];
+      const challengedTeamList = challengedTeams?.map(t => t.team_id) || [];
+
+      // RÈGLE 2 : Seul ceux qui sont dans une communauté validée peuvent défier
+      if (challengerTeamList.length === 0) {
+        throw new Error("Vous devez rejoindre au moins une Team validée pour lancer des défis.");
+      }
+
+      // RÈGLE 3 : Un joueur ne peut défier que celui qui partage au moins une Team en commun avec lui
+      const sharedTeams = challengerTeamList.filter(t => challengedTeamList.includes(t));
+      if (sharedTeams.length === 0) {
+        throw new Error("Vous ne pouvez défier que des joueurs de votre propre Team.");
       }
 
       // RÈGLE 1 : Restriction de rangs
-      const challengerLp = Array.isArray(challengerMeta.loyalty_points) ? challengerMeta.loyalty_points[0] : challengerMeta.loyalty_points;
-      const challengedLp = Array.isArray(challengedMeta.loyalty_points) ? challengedMeta.loyalty_points[0] : challengedMeta.loyalty_points;
-
       const challengerHours = challengerLp?.total_hours || 0;
       const challengedHours = challengedLp?.total_hours || 0;
 
@@ -98,7 +150,7 @@ export function useRagnarok() {
       const maxAllowedDiff = hasTwoRanksRight ? 2 : 1;
 
       if (rankDiff < 0) {
-        // Le défié est de rang inférieur, c'est autorisé (pas de restriction vers le bas)
+        // Le défié est de rang inférieur : autorisé
       } else if (rankDiff > maxAllowedDiff) {
         throw new Error(`Vous ne pouvez défier qu'un joueur de même rang ou du rang supérieur suivant (${hasTwoRanksRight ? '2' : '1'} max).`);
       }
@@ -107,20 +159,21 @@ export function useRagnarok() {
       const isChallengedHigher = dIdx > cIdx;
       const challengedWager = isChallengedHigher ? amount * 0.5 : amount;
 
-      // C. Insérer le défi
-      const { error } = await supabase
-        .from('ragnarok_challenges')
-        .insert([{
-          challenger_id: user.id,
-          challenged_id: challengedId,
-          currency_type: currencyType,
-          amount,
-          challenged_wager: challengedWager,
-          scheduled_at: scheduledAt,
-          status: 'pending'
-        }])
+      // F. Insérer la demande de défi (Inclusion de l'arène de la Team)
+        const { error: insertErr } = await supabase
+          .from('ragnarok_challenges')
+          .insert([{
+            challenger_id: user.id,
+            challenged_id: challengedId,
+            currency_type: currencyType,
+            amount,
+            challenged_wager: challengedWager,
+            scheduled_at: scheduledAt,
+            status: 'pending',
+            team_id: teamId // AJOUTÉ
+          }])
 
-      if (error) throw error
+      if (insertErr) throw insertErr
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ragnarok_challenges', user?.id] })

@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from './useAuth'
 
 export interface UserMetadata {
+  loyalty_points: any
   user_id: string
   membership_type: 'standard' | 'vip'
   display_name: string

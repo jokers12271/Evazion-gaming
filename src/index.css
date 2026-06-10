@@ -144,3 +144,59 @@
     transform: translateY(0);
   }
 }
+
+/* =============================================================================
+   OPTIMISATIONS ET RÉDUCTIONS DE TAILLES MOBILES GLOBALES (Tout le site)
+   ============================================================================= */
+@media (max-width: 768px) {
+  :root {
+    --radius: 0.5rem !important;
+  }
+
+  /* 1. Réduire de manière compacte tous les paddings et arrondis des boîtes vitrées (glass) sauf la barre de navigation (nav) */
+  .glass:not(nav) {
+    padding: 1.25rem !important; /* Force p-5 sur mobile au lieu de p-8/p-10 */
+    border-radius: 1.75rem !important; /* Arrondis de coins plus discrets pour mobile */
+  }
+
+  /* 2. Réduire l'espacement de marge des en-têtes (Headers) de toutes les pages */
+  header, .mb-20, .mb-16 {
+    margin-bottom: 2rem !important; /* Resserre les en-têtes à 32px */
+  }
+  
+  .mb-12, .mb-10 {
+    margin-bottom: 1.25rem !important; /* Resserre les sous-sections à 20px */
+  }
+
+  /* 3. Réduction de taille typographique globale des titres de pages */
+  h1, .text-5xl, .text-6xl {
+    font-size: 2rem !important; /* text-3xl standard sur mobile */
+    line-height: 1.15 !important;
+  }
+  
+  h2, .text-3xl, .text-4xl {
+    font-size: 1.5rem !important; /* text-2xl standard sur mobile */
+    line-height: 1.2 !important;
+  }
+
+  h3, .text-2xl {
+    font-size: 1.125rem !important; /* text-lg standard sur mobile */
+    line-height: 1.25 !important;
+  }
+
+  h4, .text-xl {
+    font-size: 1rem !important; /* text-base standard sur mobile */
+  }
+
+  /* 4. Compression de toutes les grilles de cartes (Boutique, Tournois, Salon, etc.) */
+  .grid {
+    gap: 1rem !important; /* Espacement de grille uniforme à 16px sur mobile */
+  }
+
+  /* 5. Réduction de la hauteur des cartes de l'Échelle de Puissance et de la Boutique */
+  .h-\[500px\], .h-\[480px\], .min-h-\[400px\] {
+    height: 340px !important; /* Hauteur de cartes compacte sur mobile */
+    min-height: 340px !important;
+    padding: 1.25rem !important;
+  }
+}

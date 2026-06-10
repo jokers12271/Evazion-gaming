@@ -8,6 +8,8 @@ import { cn } from '@blinkdotnew/ui'
 import { toast } from 'react-hot-toast'
 import { useReservations } from '@/hooks/useReservations'
 import { useUserMetadata, useToggleBanPlayer } from '@/hooks/useUserMetadata' // AJOUTÉ
+import { AdminOnboardingModal, AdminOnboardingStep } from '@/components/ui/AdminOnboardingModal'
+import { ShieldAlert } from 'lucide-react'
 
 export function PlayerDetail() {
   const { playerId } = useParams({ from: '/dashboard/player/$playerId' })
@@ -62,8 +64,23 @@ export function PlayerDetail() {
     }
   }
 
+  const adminOnboardingSteps: AdminOnboardingStep[] = [
+    {
+      title: "Lancement de Session Live",
+      desc: "Cliquez sur 'Démarrer Session Live' pour allouer et démarrer instantanément un poste de jeu physique pour ce joueur en salle.",
+      icon: <User size={28} />
+    },
+    {
+      title: "Panneau de Modération",
+      desc: "En cas de non-respect du règlement de la salle, utilisez le bouton de Bannissement pour exclure temporairement ou définitivement le joueur.",
+      icon: <ShieldAlert size={28} />
+    }
+  ]
+
   return (
-    <div className="pt-40 pb-24 min-h-screen bg-background text-white">
+    <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen bg-background text-white">
+      {/* LE GUIDE DE BIENVENUE DU GÉRANT SUR PLAYERDETAIL (AJOUTÉ) */}
+      {isAdmin && <AdminOnboardingModal pageKey="player_detail" steps={adminOnboardingSteps} />}
       <div className="container mx-auto px-4 max-w-2xl">
         <button onClick={() => navigate({ to: '/dashboard' })} className="flex items-center gap-2 text-muted-foreground mb-8 hover:text-white transition-colors uppercase text-[10px] font-black tracking-widest">
           <ChevronLeft size={16} /> Retour Dashboard

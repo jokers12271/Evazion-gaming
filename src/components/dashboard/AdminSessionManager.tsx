@@ -54,13 +54,20 @@ export function AdminSessionManager({ reservation }: Props) {
     }
   }
 
+  // CLÔTURE DE SESSION NETTE - CONSOMMATION À 100 % DU TEMPS PRÉVU (CORRIGÉ)
   const handleComplete = async () => {
     try {
-      await updateStatus.mutateAsync({ id: reservation.id, status: 'consommé' });
-      toast.success("Session terminée !");
+      // Nous mettons simplement à jour le statut sur 'consommé'. 
+      // L'heure de fin d'origine reste intacte pour créditer 100% de la durée au joueur.
+      await updateStatus.mutateAsync({ 
+        id: reservation.id, 
+        status: 'consommé' 
+      });
+      
+      toast.success("Session consommée à 100 % ! Crédits attribués.");
     } catch (e: any) {
       console.error("Erreur de clôture individuelle :", e);
-      toast.error(`Erreur : ${e.message || e}`, { position: "bottom-center" }); // MODIFIÉ (Affiche l'erreur exacte)
+      toast.error(`Erreur : ${e.message || e}`, { position: "bottom-center" });
     }
   }
 

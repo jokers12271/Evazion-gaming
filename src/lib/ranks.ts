@@ -1,39 +1,61 @@
 export const RANKS = [
   { 
-    name: "Test", min: 0, max: 4, color: "#94a3b8", label: "text-slate-400", bg: "bg-slate-400/10", border: "border-slate-400/20", reward: "Mot de bienvenue",
-    image: "https://img.freepik.com/free-vector/check-mark-cross-buttons-sticker-style-design_1017-36611.jpg" 
+    name: "Test", min: 0, max: 4.99, color: "#94a3b8", label: "text-slate-400", bg: "bg-slate-400/10", border: "border-slate-400/20", 
+    reward: "Mot de bienvenue au Sanctuary.",
+    image: "https://eveks.eu/4432-large_default/test.jpg" 
   },
   { 
-    name: "Régulier", min: 5, max: 15, color: "#22c55e", label: "text-green-500", bg: "bg-green-500/10", border: "border-green-500/20", reward: "1 bouteille d'eau offerte <span class='text-secondary font-black text-glow-cyan animate-pulse'>+ 15 min offertes sur la première session de chaque semaine !</span>",
-    image: "https://northernirelandscreen.co.uk/wp-content/uploads/2020/10/Restart.jpg"
+    name: "Débutant", min: 5, max: 19.99, color: "#22c55e", label: "text-green-500", bg: "bg-green-500/10", border: "border-green-500/20", 
+    reward: "1 Boisson offerte à récupérer à l'accueil.",
+    image: "https://www.shutterstock.com/image-vector/beginner-stamp-icon-grunge-distressed-600nw-2603588521.jpg" 
   },
   { 
-    name: "Fidèle", min: 16, max: 30, color: "#3b82f6", label: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", reward: "Priorité de réservation les week-ends <span class='text-secondary font-black text-glow-cyan animate-pulse'>+ 30 min offertes sur la première session de chaque semaine !</span>",
-    image: "https://img.magnific.com/vecteurs-premium/symbole-marque-controle-verte-dans-cercle-indiquant-confirmation-validation-homologation_1256898-1434.jpg?semt=ais_hybrid&w=740&q=80"
+    name: "Novice", min: 20, max: 44.99, color: "#3b82f6", label: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", 
+    reward: "<span class='text-secondary font-black text-glow-cyan animate-pulse'>+15 min offertes</span> sur la première session de chaque semaine.",
+    image: "https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=600&auto=format&fit=crop" 
   },
   { 
-    name: "Pro", min: 31, max: 80, color: "#a855f7", label: "text-purple-500", bg: "bg-purple-500/10", border: "border-purple-500/20", reward: "Privilèges du rang Fidèle + réduction de 25% aux tournois/events <span class='text-secondary font-black text-glow-cyan'>+ 15 min offertes sur toutes les sessions !</span>",
-    image: "https://www.metrofamilymagazine.com/wp-content/uploads/2022/10/uco-gaming-arena.jpg"
+    name: "Amateur", min: 45, max: 79.99, color: "#a855f7", label: "text-purple-500", bg: "bg-purple-500/10", border: "border-purple-500/20", 
+    reward: "Priorité de réservation les week-ends + <span class='text-secondary font-black text-glow-cyan'>+15 min offertes</span> sur la première session de chaque semaine.",
+    image: "https://static.wikia.nocookie.net/naruto/images/a/a2/Boruto_Uzumaki.png/revision/latest?cb=20211026120402&path-prefix=fr" 
   },
   { 
-    name: "Légende", min: 81, max: 110, color: "#eab308", label: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/20", reward: "Priorité de réservation tous les jours + réduction 50% tournois/events + accès Salle des Légendes + 25% réduction frais de communauté <span class='text-secondary font-black text-glow-cyan'>+ Pack Légende 5h = 5000 FCFA</span> + gâteau offert une fois",
-    image: "https://cdn.shopify.com/s/files/1/0269/0868/8432/files/Qu_est-ce_qu_un_Dragon_3.jpg?v=1726514354"
+    name: "Semi-Pro", min: 80, max: 129.99, color: "#f97316", label: "text-orange-500", bg: "bg-orange-500/10", border: "border-orange-500/20", 
+    reward: "Priorité de réservation les week-ends + <span class='text-secondary font-black text-glow-cyan animate-pulse'>+30 min offertes</span> sur la première session de chaque semaine.",
+    image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQD80SgTYVmTrmlGB793oOFIRRy-ekrwqmdqekSRhdgGHNJpt9NL7MtKUP4&s=10" 
   },
   { 
-    name: "Iconique", min: 111, max: 160, color: "#06b6d4", label: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/20", reward: "Privilèges du rang Légende + réduction 50% frais de communauté + photo sur Hall of Fame + inscription gratuite tournois/events + gâteau et yaourt offerts une fois <span class='text-secondary font-black text-glow-cyan'>+ 1h de session offerte chaque semaine !</span>",
-    image: "https://static.wikia.nocookie.net/ssb/images/3/3e/MPSS_Mario.png/revision/latest?cb=20220113043843"
+    name: "Pro", min: 130, max: 194.99, color: "#38bdf8", label: "text-sky-400", bg: "bg-sky-400/10", border: "border-sky-400/20", 
+    reward: "Réduction de 25% aux tournois & événements + <span class='text-secondary font-black text-glow-cyan'>+15 min offertes</span> sur toutes les sessions.",
+    image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS66OnT1uHOplFkUnpLX8pST6mWNKfOqxX8hSlA4jLzMJ3E9avc_QeCXzs&s=10" 
   },
   { 
-    name: "Divin", min: 161, max: 250, color: "#f43f5e", label: "text-pink-500", bg: "bg-pink-500/10", border: "border-pink-500/20", reward: "Privilèges du rang Icône <span class='text-secondary font-black text-glow-cyan'>+ 5h de session offertes chaque mois</span> <span class='text-secondary font-black text-glow-cyan'>+ 1 Session Divin de jeu offerte !</span>",
-    image: "https://www.prime1studio.com/on/demandware.static/-/Sites-p1s-master-catalog/default/dw6b72e950/images/TLCGOW-02S/media/10_TLCGOW-02_670x804_PLP_thumbnail.jpg"
+    name: "Elite", min: 195, max: 279.99, color: "#f43f84ea", label: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20", 
+    reward: "Accès exclusif aux réservations prioritaires + Réduction de 25% aux tournois + <span class='text-secondary font-black text-glow-cyan'>+15 min offertes</span> sur toutes vos sessions.",
+    image: "https://preview.redd.it/if-ayanokoji-was-in-classroom-of-the-elite-what-class-would-v0-l0icr6tpqo2f1.jpeg?auto=webp&s=835eeafee9f17172b8131cbe572a8544149b20bb" 
   },
   { 
-    name: "Mystère", min: 251, max: 0, color: "#202020", label: "text-white", bg: "bg-white/10", border: "border-white/40", reward: "??? (Secret d'État)",
-    image: "https://thumbs.dreamstime.com/b/silhouette-hacker-isloated-black-background-93196585.jpg" 
+    name: "Légende", min: 280, max: 379.99, color: "#eab308", label: "text-yellow-500", bg: "bg-yellow-500/10", border: "border-yellow-500/20", 
+    reward: "Accès Salle des Légendes + Réduction de 50% aux tournois + Réduction 25% communauté + <span class='text-secondary font-black text-glow-cyan animate-pulse'>Pack Légende 5h à 5000 F</span> + Gâteau offert + <span class='text-secondary font-black text-glow-cyan'>+30 min offertes</span> sur toutes vos sessions.",
+    image: "https://cdn.shopify.com/s/files/1/0269/0868/8432/files/Qu_est-ce_qu_un_Dragon_3.jpg?v=1726514354" 
   },
+  { 
+    name: "Iconique", min: 380, max: 499.99, color: "#06b6d4", label: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/20", 
+    reward: "Photo au Hall of Fame + Inscriptions Tournois GRATUITES + Réduction 50% communauté + Gâteau/Yaourt offerts + <span class='text-secondary font-black text-glow-cyan animate-pulse'>1h de jeu offerte chaque semaine</span> + <span class='text-secondary font-black text-glow-cyan'>+1h de bonus</span> sur toutes vos sessions.",
+    image: "https://static.wikia.nocookie.net/ssb/images/3/3e/MPSS_Mario.png/revision/latest?cb=20220113043843" 
+  },
+  { 
+    name: "Divin", min: 500, max: 999999, color: "#e71212", label: "text-pink-500", bg: "bg-pink-500/10", border: "border-pink-500/20", 
+    reward: "Photo au Hall of Fame + Inscriptions Tournois GRATUITES + Réduction 50% communauté + Gâteau/Yaourt offerts + <span class='text-secondary font-black text-glow-cyan animate-pulse'>5h offertes CHAQUE SEMAINE</span> + Session Divin offerte + <span class='text-secondary font-black text-glow-cyan'>+1h de bonus</span> sur toutes vos sessions.",
+    image: "https://i.etsystatic.com/15552571/r/il/0cb884/7392120604/il_fullxfull.7392120604_gru5.jpg" 
+  },
+  { 
+    name: "Mystère", min: 1000000, max: 0, color: "#202020", label: "text-white", bg: "bg-white/10", border: "border-white/40", 
+    reward: "??? (Secret d'État)",
+    image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop" 
+  }
 ];
 
-// Prise en charge de la borne infinie du rang Mystère (max = 0)
 export function getRank(hours: number) {
   return RANKS.find(r => hours >= r.min && (r.max === 0 || hours <= r.max)) || RANKS[0];
 }

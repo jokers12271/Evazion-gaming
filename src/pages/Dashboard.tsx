@@ -13,7 +13,7 @@ import {
   User, Trophy, Clock, Calendar, LogOut, ShieldCheck, 
   Loader2, Crown, CheckCircle2, X, Timer, Users, 
   TrendingUp, Activity, Hash, Zap, Star, ShoppingBag, Check,
-  Camera, Bell, Play, Trash2
+  Camera, Bell, Play, Trash2,
 } from 'lucide-react'
 import { cn } from '@blinkdotnew/ui'
 import { format } from 'date-fns'
@@ -32,6 +32,18 @@ import { ManiTransfer } from '@/components/dashboard/ManiTransfer' // AJOUTÉ
 import { RagnarokChallenge } from '@/components/dashboard/RagnarokChallenge' // AJOUTÉ
 import { RagnarokAdmin } from '@/components/dashboard/RagnarokAdmin' // AJOUTÉ
 import { GiftHoursAdmin } from '@/components/dashboard/GiftHoursAdmin' // AJOUTÉ
+import { GiftHoursHistory } from '@/components/dashboard/GiftHoursHistory' // AJOUTÉ : Import de la liste d'historique déportée
+import { ProfileSettings } from '@/components/dashboard/ProfileSettings'
+import { Settings } from 'lucide-react'
+import { GamerPrivileges } from '@/components/dashboard/GamerPrivileges'
+import { PrivilegeRequestsAdmin } from '@/components/dashboard/PrivilegeRequestsAdmin'
+import { TimeCreditTransfer } from '@/components/dashboard/TimeCreditTransfer'
+import { UnifiedTransferHistory } from '@/components/dashboard/UnifiedTransferHistory'
+import { TeamRenewalsAdmin } from '@/components/community/TeamRenewalsAdmin'
+import { OnboardingModal, OnboardingStep } from '@/components/ui/OnboardingModal'
+import { Wallet, Gift } from 'lucide-react'
+import { AdminOnboardingModal, AdminOnboardingStep } from '@/components/ui/AdminOnboardingModal'
+
 
 // AJOUTÉ : Liste des packs d'équipe supportés pour la cagnotte
 const TEAM_PACKS = [
@@ -39,6 +51,7 @@ const TEAM_PACKS = [
   { name: '🏆 Pack 1h30', price: 2000, minutes: 90 },
   { name: '📦 Pack 4h', price: 5000, minutes: 240 },
 ]
+
 
 
 export function Dashboard() {
@@ -53,10 +66,22 @@ export function Dashboard() {
 
   const isAdmin = (metadata as any)?.is_admin
 
-  // AJOUTÉ : Lancer le calculateur automatique du joueur du mois (chaque 1er du mois ou au montage)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+
+  // AJOUTÉ : Lancer le calculateur de joueur du mois et l'auto-nettoyage des historiques de la base (Auto-Purge)
   useEffect(() => {
     if (user) {
+      // Élection du joueur du mois
       proclaimWinnerMutation.mutate();
+
+      // Déclencher le nettoyage en tâche de fond (silencieux)
+      const purgeExpiredData = async () => {
+        const { error } = await supabase.rpc('purge_expired_data');
+        if (error) {
+          console.warn("Échec silencieux de l'auto-purge :", error);
+        }
+      };
+      purgeExpiredData();
     }
   }, [user]);
 
@@ -100,14 +125,13 @@ export function Dashboard() {
   const pauseTeamSession = usePauseTeamSession() // AJOUTÉ
   const resumeTeamSession = useResumeTeamSession() // AJOUTÉ
 
-  // AJOUTÉ : Requête pour charger toutes les sessions d'équipes (Admin voit tout, joueur voit ses cagnottes)
+  // AJOUTÉ : Requête pour charger toutes les sessions d'équipes (Avec règle de masquage de 48h pour le joueur)
   const { data: teamSessions } = useQuery({
     queryKey: ['all_team_sessions', user?.id],
     queryFn: async () => {
       if (!user) return []
       
       if (isAdmin) {
-        // L'administrateur charge toutes les sessions
         const { data, error } = await supabase
           .from('team_sessions')
           .select('*, creator:creator_id(display_name), team_session_members(*, users_metadata(display_name))')
@@ -115,7 +139,6 @@ export function Dashboard() {
         if (error) throw error
         return data || []
       } else {
-        // Le joueur charge uniquement les équipes dont il est membre
         const { data: memberships } = await supabase
           .from('team_session_members')
           .select('team_session_id')
@@ -129,12 +152,25 @@ export function Dashboard() {
           .select('*, creator:creator_id(display_name), team_session_members(*, users_metadata(display_name))')
           .in('id', sessionIds)
           .order('created_at', { ascending: false })
+        
         if (error) throw error
-        return data || []
+
+        // Appliquer la barrière temporelle de 48h sur les cagnottes closes pour le joueur
+        const now = new Date();
+        const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+        return (data || []).filter((ts: any) => {
+          // Toujours afficher si la session est active ou en cours de consensus
+          if (ts.status === 'en cours' || ts.status === 'pending' || ts.status === 'pending_consensus') {
+            return true;
+          }
+          const createdAt = new Date(ts.created_at);
+          return createdAt >= fortyEightHoursAgo;
+        });
       }
     },
     enabled: !!user,
-    refetchInterval: 10000 // Actualisation temps réel
+    refetchInterval: 10000 
   })
 
   // AJOUTÉ : États locaux pour la gestion du formulaire dynamique de Cagnotte d'Équipe
@@ -296,7 +332,7 @@ export function Dashboard() {
     borderColor: isAdmin ? '#f59e0b' : currentRank.color,
     boxShadow: `0 0 20px ${isAdmin ? '#f59e0b' : currentRank.color}20`
   };
-  const boxClass = "glass p-8 rounded-[2.5rem] border-2 transition-all duration-300 hover:scale-[1.02] hover:shadow-2xl cursor-default";
+  const boxClass = "glass p-5 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border-2 transition-all duration-300 hover:scale-[1.01] hover:shadow-xl cursor-default";
 
   if (metaLoading || loyaltyLoading || resLoading) {
     return (
@@ -317,8 +353,60 @@ export function Dashboard() {
     )
   }
 
+  const onboardingSteps: OnboardingStep[] = [
+    {
+      title: "Votre Terminal Personnel",
+      desc: "Bienvenue sur votre espace. Suivez vos chronomètres actifs de consoles et d'équipes en temps réel de manière synchronisée.",
+      icon: <User size={28} />
+    },
+    {
+      title: "Portefeuille de MANI & Crédits",
+      desc: "Suivez votre solde de monnaie MANI et utilisez votre crédit de minutes en cas d'interruptions de sessions d'un simple clic.",
+      icon: <Wallet size={28} />
+    },
+    {
+      title: "Dons et Cadeaux",
+      desc: "Un ami est en panne de temps de jeu ? Transférez-lui instantanément des jetons MANI ou du crédit de minutes directement depuis vos modules.",
+      icon: <Gift size={28} />
+    },
+    {
+      title: "Vos Privilèges Rangs",
+      desc: "Consultez les avantages de votre Rang actuel. Cochez et réclamez vos boissons et gâteaux d'un clic pour alerter le gérant physique.",
+      icon: <Settings size={28} />
+    }
+  ]
+
+  const adminOnboardingSteps: AdminOnboardingStep[] = [
+    {
+      title: "Télécommande de Chronomètres",
+      desc: "Voici votre terminal. Utilisez le bouton Bleu (Play) pour lancer une session, Jaune (Pause) pour la geler, Orange (Crédit) pour l'interrompre et sauvegarder son temps restant, et Vert pour la clôturer.",
+      icon: <User size={28} />
+    },
+    {
+      title: "Validation des Cotisations",
+      desc: "Retrouvez et validez d'un clic les demandes d'adhésions de Teams des joueurs ou leurs demandes de cadeaux physiques de rangs.",
+      icon: <Trophy size={28} />
+    },
+    {
+      title: "Scanner & Identification",
+      desc: "Utilisez le bouton 'Lancer le Scanner' pour scanner le pass QR d'un joueur à son arrivée et son départ pour enregistrer sa présence.",
+      icon: <Camera size={28} />
+    },
+    {
+      title: "Cadeau d'heures (Gifts)",
+      desc: "Offrez des bonus de crédits temps à tout joueur méritant. La session sera automatiquement créditée et le joueur en sera notifié.",
+      icon: <Gift size={28} />
+    }
+  ]
+
   return (
-    <div className="pt-40 pb-24 min-h-screen bg-background text-left animate-fade-in relative overflow-hidden">
+    <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen bg-background text-left animate-fade-in relative overflow-hidden">
+      {/* GUIDE DU JOUEUR */}
+      {!isAdmin && <OnboardingModal pageKey="dashboard" steps={onboardingSteps} />}
+
+      {/* GUIDE DU GÉRANT (AJOUTÉ) */}
+      {isAdmin && <AdminOnboardingModal pageKey="dashboard" steps={adminOnboardingSteps} />}
+      
       {/* Blason d'arrière-plan personnalisé (Couvre entièrement l'écran) */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-background/20 via-background/90 to-background z-10" />
@@ -329,7 +417,7 @@ export function Dashboard() {
         />
       </div>
 
-      <div className="container mx-auto px-4 max-w-7xl relative z-20">
+      <div className="container mx-auto px-5 max-w-7xl relative z-20">
         
         {/* AJOUTÉ : Chronomètre d'Équipe Synchrone Partagé en temps réel */}
         {!isAdmin && activeTeamSession && (
@@ -363,14 +451,25 @@ export function Dashboard() {
 
       <div className="container mx-auto px-4 max-w-7xl relative z-20">
         
-        {/* --- HEADER (Structure à 3 colonnes Équilibrée) --- */}
+        {/* --- HEADER (Structure à 3 colonnes Équilibrée - Miniaturisée sur mobile) --- */}
         <div 
           className={cn(
-            "flex flex-col md:flex-row justify-between items-center gap-8 mb-12 glass p-10 rounded-[2.5rem] border-l-[12px] transition-all duration-500 shadow-2xl" ,
+            "flex flex-col md:flex-row justify-between items-center gap-4 mb-4 glass p-5 md:p-10 rounded-[1.75rem] md:rounded-[2.5rem] border-l-[12px] transition-all duration-500 shadow-2xl" ,
             isAdmin ? "border-amber-500 shadow-amber-500/10" : "border-opacity-100"
           )}
           style={!isAdmin ? { borderLeftColor: currentRank.color } : {}}
         >
+          {/* Filigrane d'authenticité du blason (Opacité de 8 %, bords arrondis et fondu progressif) */}
+          <div 
+            className="absolute right-0 top-0 bottom-0 w-32 md:w-48 h-full pointer-events-none opacity-[0.18] flex items-center justify-end z-0 overflow-hidden select-none" 
+            style={{ 
+              maskImage: 'radial-gradient(circle, black 30%, transparent 80%)',
+              WebkitMaskImage: 'radial-gradient(circle, black 30%, transparent 80%)'
+            }}
+          >
+            <img src="/blason.png" className="h-full object-contain translate-x-8 md:translate-x-12 scale-110 select-none pointer-events-none" alt="Sanctuary Seal" />
+          </div>
+
           {/* ZONE 1 (À gauche) : Avatar + Nom + Badge de Rang */}
           <div className="flex flex-col md:flex-row items-center gap-8 text-center md:text-left shrink-0">
             <div className={cn(
@@ -388,16 +487,29 @@ export function Dashboard() {
                  </div>
               )}
             </div>
-            <div className="text-left">
-              <h1 className="text-5xl font-display font-black uppercase tracking-tighter text-white mb-2 line-clamp-1" translate="no">
+            <div className="text-center md:text-left flex flex-col items-center md:items-start">
+              {/* Le nom de gamer */}
+              <h1 className="text-4xl md:text-5xl font-display font-black uppercase tracking-tighter text-white mb-2 line-clamp-1" translate="no">
                 {metadata?.display_name}
               </h1>
-              <span className={cn(
-                "px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] border inline-block",
-                isAdmin ? "bg-amber-500 text-black border-amber-500" : `${currentRank.bg} ${currentRank.label} ${currentRank.border}`
-              )}>
-                {isAdmin ? "ADMINISTRATEUR HUB" : `RANG ${currentRank.name}`}
-              </span>
+              
+              {/* Badge de Rang seul sur sa ligne */}
+              <div className="mb-2.5">
+                <span className={cn(
+                  "px-3.5 py-1 rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] border inline-block",
+                  isAdmin ? "bg-amber-500 text-black border-amber-500" : `${currentRank.bg} ${currentRank.label} ${currentRank.border}`
+                )}>
+                  {isAdmin ? "ADMINISTRATEUR HUB" : `RANG ${currentRank.name}`}
+                </span>
+              </div>
+
+              {/* Bouton de configuration ultra-discret en dessous */}
+              <button 
+                onClick={() => setIsSettingsOpen(true)}
+                className="text-[9px] font-black uppercase tracking-[0.15em] text-white/30 hover:text-secondary transition-colors mt-1 focus:outline-none"
+              >
+                ⚙️ Modifier profil
+              </button>
             </div>
           </div>
 
@@ -415,10 +527,24 @@ export function Dashboard() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-10">
           
           {/* SECTION GAUCHE (DYNAMIQUE) */}
           <div className="space-y-10">
+            
+            {/* PANNEAU DE VALIDATION DES COTISATIONS MENSUELLES (ADMIN - AJOUTÉ ICI) */}
+            {isAdmin && <TeamRenewalsAdmin />}
+
+            {/* PANNEAU DE REQUÊTES DE PRIVILÈGES (ADMIN UNIQUEMENT - AJOUTÉ) */}
+            {isAdmin && <PrivilegeRequestsAdmin />}
+
+            {/* PANNEAU DE SUIVI DES PRIVILÈGES (JOUEUR UNIQUEMENT - AJOUTÉ) */}
+            {!isAdmin && (
+              <GamerPrivileges 
+                totalHours={loyalty?.total_hours || 0} 
+                displayName={metadata?.display_name || ''} 
+              />
+            )}
             
             {/* AJOUTÉ : Centre d'Alertes Sanctuary Interactif (Cagnotte & Favoris) */}
             {!isAdmin && userNotifications && userNotifications.length > 0 && (
@@ -554,9 +680,9 @@ export function Dashboard() {
             ) : (
               <>
                 <section className={boxClass} style={boxStyle}>
-                  <div className="flex items-center justify-between mb-6 text-white">
-                    <h3 className="font-display uppercase tracking-widest text-[10px] text-muted-foreground font-black">Monnaie Store</h3>
-                    <Hash size={18} className="text-primary" />
+                  <div className="flex items-center justify-between mb-3 text-white">
+                    <h4 className="font-display uppercase tracking-widest text-[10px] text-muted-foreground font-black">Monnaie Store</h4>
+                    <Hash size={14} className="text-primary" />
                   </div>
                    <div className="text-6xl font-display font-black flex items-center justify-center gap-4 text-white">{points} <ManiIcon size="w-12 h-12" /></div>
                   <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden mt-6">
@@ -565,11 +691,11 @@ export function Dashboard() {
                 </section>
 
                 <section className={boxClass} style={boxStyle}>
-                  <div className="flex items-center justify-between mb-6 text-white">
-                    <h3 className="font-display uppercase tracking-widest text-[10px] text-muted-foreground font-black">Niveau de Loyauté</h3>
+                  <div className="flex items-center justify-between mb-3 text-white">
+                    <h4 className="font-display uppercase tracking-widest text-[10px] text-muted-foreground font-black">Niveau de Loyauté</h4>
                     <Trophy className={currentRank.label} size={20} />
                   </div>
-                  <div className="text-5xl font-display font-black mb-2 text-white">{currentHours} <span className="text-lg opacity-40 font-normal">H</span></div>
+                  <div className="text-6xl font-display font-black flex items-center justify-center gap-4 text-white">{currentHours} <span className="text-lg opacity-40 font-normal">H</span></div>
                   <div className="mt-8 space-y-4">
                     <div className="flex justify-between text-[10px] font-black uppercase text-white">
                       <span className={currentRank.label}>Rang {currentRank.name}</span>
@@ -679,6 +805,16 @@ export function Dashboard() {
                     {!isAdmin && (
                     <ManiTransfer boxClass={boxClass} boxStyle={boxStyle} /> 
                   )}
+
+                {/* PANNEAU DE TRANSFERT DE TEMPS ENTRE AMIS */}
+                    {!isAdmin && (
+                      <TimeCreditTransfer boxClass={boxClass} boxStyle={boxStyle} /> 
+                    )}
+
+                    {/* NOUVEL HISTORIQUE UNIFIÉ (MANI + MINUTES COMBINÉS - AJOUTÉ) */}
+                    {!isAdmin && (
+                      <UnifiedTransferHistory boxClass={boxClass} boxStyle={boxStyle} />
+                    )}
 
 
                     {/* AJOUTÉ : Section de Duel Ragnarok (Intégration du nouveau fichier déporté) */}
@@ -1065,26 +1201,59 @@ export function Dashboard() {
                     {isAdmin ? "Cagnottes & Sessions d'Équipes" : "Mes Cagnottes & Équipes"}
                   </h3>
                   <div className="space-y-6">
-                    {teamSessions.map((ts: any) => (
+                    {teamSessions.map((ts: any) => {
+                      const pRank = getRank(ts.creator?.loyalty_points?.[0]?.total_hours || 0);
+                      const playerName = ts.creator?.display_name || ts.display_name || 'Joueur';
+                      return (
                       <div key={ts.id} className="flex flex-col sm:flex-row sm:items-center gap-6 p-6 rounded-[2rem] bg-white/5 border border-white/5 hover:border-secondary/30 transition-all text-white">
                         <div className="flex-1">
                           <div className="flex flex-wrap items-center gap-3 mb-2">
-                            <h4 className="font-black text-lg uppercase">{ts.station_id}</h4>
-                            <span className="px-3 py-1 rounded-lg bg-white/10 text-secondary text-[10px] font-black border border-secondary/20">{ts.total_minutes} MIN</span>
-                            
-                            {/* AJOUTÉ : Affichage du chronomètre dynamique en direct pour l'Admin et les joueurs */}
-                            {ts.status === 'en cours' && (
-                              <LiveCountdown 
-                                endTime={ts.end_time} 
-                                isStarted={true} 
-                                className="ml-2 text-[10px] py-1 px-3 shadow-neon-violet" 
-                                isPaused={ts.is_paused}
-                                pausedRemainingSeconds={ts.paused_remaining_seconds}
-                              />
-                            )}
+                          <h4 className="font-black text-xl uppercase tracking-widest">{ts.station_id}</h4>
+                          
+                          {/* 1. CALCULS DES TEMPS DE BASE ET DE BONUS */}
+                          {(() => {
+                            const diff = new Date(ts.end_time).getTime() - new Date(ts.start_time).getTime();
+                            const totalDurationInMin = Math.round(diff / 60000);
+                            const bonusMinutes = ts.bonus_minutes_applied || 0;
+                            const baseDurationInMin = totalDurationInMin - bonusMinutes;
 
-                            <span className="px-3 py-1 rounded-lg bg-white/10 text-primary text-[10px] font-black border border-primary/20">Créateur : @{ts.creator?.display_name}</span>
+                            return (
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* Badge de temps de base (Cyan) */}
+                                <div className="px-3 py-1 rounded-lg bg-white/10 text-secondary text-[10px] font-black border border-secondary/20 flex items-center gap-1.5 shrink-0">
+                                  <Timer size={12} /> {baseDurationInMin} MIN
+                                </div>
+
+                                {/* Badge de temps de Bonus séparé (Violet - Uniquement si supérieur à 0) */}
+                                {bonusMinutes > 0 && (
+                                  <div className="px-3 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-black border border-primary/20 flex items-center gap-1 shrink-0 animate-pulse">
+                                    +{bonusMinutes} MIN BONUS
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* 2. AFFICHAGE PERMANENT DU PSEUDO DU JOUEUR (Visible par tout le monde) */}
+                          <div className={cn("px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border shadow-lg flex items-center gap-2", pRank.bg, pRank.label, pRank.border)}>
+                            <span translate="no">@{ts.display_name}</span> 
+                            <span className="opacity-40 font-normal">({pRank.name})</span>
+                            {ts.is_credit_use && ts.status === 'pending' && (
+                              <span className="ml-2 bg-white text-black px-2 py-0.5 rounded animate-pulse shadow-white text-[8px]">REPRISE</span>
+                            )}
                           </div>
+
+                          {/* 3. LE CHRONOMÈTRE (Prend automatiquement en compte la somme des deux temps) */}
+                          {!isAdmin && ts.status === 'en cours' && (
+                            <LiveCountdown 
+                              endTime={ts.end_time} 
+                              isStarted={true} 
+                              className="ml-2" 
+                              isPaused={ts.is_paused}
+                              pausedRemainingSeconds={ts.paused_remaining_seconds}
+                            />
+                          )}
+                        </div>
                           <div className="flex flex-wrap gap-2 mt-3">
                             {ts.team_session_members?.map((m: any) => (
                               <span key={m.user_id} className="text-[9px] font-bold bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 text-white/70" translate="no">
@@ -1223,7 +1392,7 @@ export function Dashboard() {
                           )}
                         </div>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 </div>
               )}
@@ -1231,39 +1400,89 @@ export function Dashboard() {
               <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                 {reservations?.map((res: any) => {
                   const diff = new Date(res.end_time).getTime() - new Date(res.start_time).getTime();
-                  const durationInMin = Math.round(diff / 60000);
+                  const totalDurationInMin = Math.round(diff / 60000);
                   const lp = Array.isArray(res.loyalty_points) ? res.loyalty_points[0] : res.loyalty_points;
                   const pRank = getRank(lp?.total_hours || 0);
 
                   return (
-                    <div key={res.id} className="flex flex-col sm:flex-row sm:items-center gap-6 p-8 rounded-[2rem] bg-white/5 border border-white/5 hover:border-primary/30 transition-all text-white text-left">
+                    <div key={res.id} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-[1.25rem] md:rounded-[2rem] bg-white/5 border border-white/5 hover:border-primary/30 transition-all text-white text-left text-xs">
                       <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-3 mb-2">
-                          <h4 className="font-black text-xl uppercase tracking-widest">{res.station_id}</h4>
-                          <div className="px-3 py-1 rounded-lg bg-white/10 text-secondary text-[10px] font-black border border-secondary/20 flex items-center gap-2"><Timer size={12} /> {durationInMin} MIN 
-                            {!isAdmin && res.status === 'en cours' && (
-                              <LiveCountdown 
-                                endTime={res.end_time} 
-                                isStarted={true} 
-                                className="ml-2" 
-                                isPaused={res.is_paused}
-                                pausedRemainingSeconds={res.paused_remaining_seconds}
-                              />
-                            )}
-                          </div>
-                          {isAdmin && (
-                            <div className={cn("px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border shadow-lg flex items-center gap-2", pRank.bg, pRank.label, pRank.border)}>
-                                <span translate="no">{res.display_name}</span> (Rang {pRank.name})
-                               {res.is_credit_use && res.status === 'pending' && <span className="ml-2 bg-white text-black px-2 py-0.5 rounded animate-pulse shadow-white">REPRISE</span>}
-                            </div>
+                        
+                        {/* 1. BANDEAU D'EN-TÊTE DU JOUEUR (AJOUTÉ ET SYSTÉMATIQUEMENT VISIBLE) */}
+                        <div className="flex flex-wrap items-center gap-2 mb-4">
+                          <span className="text-[10px] font-black uppercase text-secondary tracking-widest bg-secondary/10 px-3.5 py-1 rounded-full border border-secondary/20 flex items-center gap-1.5 shadow-sm" translate="no">
+                            👤 JOUEUR : @{res.display_name || res.loyalty_points?.display_name || 'Gamer'}
+                          </span>
+                          <span className={cn("px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border shadow-sm", pRank.bg, pRank.label, pRank.border)}>
+                            Rang {pRank.name}
+                          </span>
+                          {res.is_credit_use && res.status === 'pending' && (
+                            <span className="px-2 py-1 rounded bg-white text-black text-[8px] font-black uppercase tracking-wider animate-pulse shadow-white">
+                              REPRISE CRÉDIT
+                            </span>
                           )}
                         </div>
-                        <p className="text-sm text-muted-foreground font-medium flex items-center gap-2 uppercase tracking-tighter opacity-60"><Clock size={14} className="text-primary" /> {format(new Date(res.start_time), "eeee d MMMM 'à' HH:mm", { locale: fr })}</p>
+
+                        {/* 2. INFOS DE LA CONSOLE & DURÉES */}
+                        <div className="flex flex-wrap items-center gap-3 mb-3">
+                          <h4 className="font-black text-xl uppercase tracking-widest">{res.station_id}</h4>
+                          
+                          {(() => {
+                            const bonusMinutes = res.bonus_minutes_applied || 0;
+                            const baseDurationInMin = totalDurationInMin - bonusMinutes;
+
+                            return (
+                              <div className="flex flex-wrap items-center gap-2">
+                                {/* Durée de base */}
+                                <div className="px-3 py-1 rounded-lg bg-white/10 text-secondary text-[10px] font-black border border-secondary/20 flex items-center gap-1.5 shrink-0">
+                                  <Timer size={12} /> {baseDurationInMin} MIN
+                                </div>
+
+                                {/* Durée de bonus séparée */}
+                                {bonusMinutes > 0 && (
+                                  <div className="px-3 py-1 rounded-lg bg-primary/10 text-primary text-[10px] font-black border border-primary/20 flex items-center gap-1 shrink-0 animate-pulse">
+                                    +{bonusMinutes} MIN BONUS
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+
+                          {/* Chronomètre (Prend en compte la somme totale) */}
+                          {!isAdmin && res.status === 'en cours' && (
+                            <LiveCountdown 
+                              endTime={res.end_time} 
+                              isStarted={true} 
+                              className="ml-2" 
+                              isPaused={res.is_paused}
+                              pausedRemainingSeconds={res.paused_remaining_seconds}
+                            />
+                          )}
+                        </div>
+
+                        {/* 3. DATE DE LA SESSION */}
+                        <p className="text-sm text-muted-foreground font-medium flex items-center gap-2 uppercase tracking-tighter opacity-60">
+                          <Clock size={14} className="text-primary" /> 
+                          {format(new Date(res.start_time), "eeee d MMMM 'à' HH:mm", { locale: fr })}
+                        </p>
                       </div>
+
+                      {/* 4. ACTIONS DE CONTRÔLE ADMIN */}
                       <div className="flex items-center gap-4">
-                        <span className={cn("text-[10px] font-black uppercase px-5 py-2.5 rounded-full border shadow-sm", res.status === 'consommé' ? "bg-green-500/10 text-green-500 border-green-500/20" : res.status === 'annulé' ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-primary/10 text-primary border-primary/20")}>{res.status}</span>
-                        {isAdmin ? <AdminSessionManager reservation={res} /> : res.status === 'pending' && <button onClick={() => updateStatus.mutate({ id: res.id, status: 'annulé' })} className="flex items-center gap-2 text-[10px] font-black uppercase text-red-500 hover:text-red-400 px-4 py-2 border border-red-500/20 rounded-xl hover:bg-red-500/10 transition-all"><X size={14} /> Annuler</button>}
+                        <span className={cn("text-[10px] font-black uppercase px-5 py-2.5 rounded-full border shadow-sm", res.status === 'consommé' ? "bg-green-500/10 text-green-500 border-green-500/20" : res.status === 'annulé' ? "bg-red-500/10 text-red-500 border-red-500/20" : "bg-primary/10 text-primary border-primary/20")}>
+                          {res.status}
+                        </span>
+                        {isAdmin ? (
+                          <AdminSessionManager reservation={res} />
+                        ) : (
+                          res.status === 'pending' && (
+                            <button onClick={() => updateStatus.mutate({ id: res.id, status: 'annulé' })} className="flex items-center gap-2 text-[10px] font-black uppercase text-red-500 hover:text-red-400 px-4 py-2 border border-red-500/20 rounded-xl hover:bg-red-500/10 transition-all">
+                              <X size={14} /> Annuler
+                            </button>
+                          )
+                        )}
                       </div>
+
                     </div>
                   )
                 })}
@@ -1296,9 +1515,34 @@ export function Dashboard() {
                 ))}
               </div>
             </section>
+             {/* AJOUTÉ : Historique de crédits d'heures offertes */}
+            {isAdmin && (
+              <GiftHoursHistory boxClass={boxClass} boxStyle={boxStyle} />
+            )}
           </div>
         </div>
       </div>
+
+      {/* MODALE DES PARAMÈTRES DE PROFIL */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center">
+          <div className="glass p-8 md:p-10 rounded-[3rem] border-2 border-secondary shadow-neon-cyan max-w-md w-full relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <button 
+              onClick={() => setIsSettingsOpen(false)}
+              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none"
+            >
+              <X size={20} />
+            </button>
+            <h3 className="text-2xl font-display font-black uppercase text-white mb-6 flex items-center gap-2 justify-center">
+              <Settings size={22} className="text-secondary animate-spin" style={{ animationDuration: '8s' }} /> Paramètres du Compte
+            </h3>
+            
+            <ProfileSettings metadata={metadata} onClose={() => setIsSettingsOpen(false)} />
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
+

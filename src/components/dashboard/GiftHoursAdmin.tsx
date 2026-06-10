@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/useAuth'
 import { NeonButton } from '@/components/ui/NeonButton'
 import { Gift, Loader2 } from 'lucide-react'
 import { toast } from 'react-hot-toast'
@@ -11,29 +12,30 @@ interface Props {
 }
 
 export function GiftHoursAdmin({ boxClass, boxStyle }: Props) {
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const [targetUserId, setTargetUserId] = useState('')
   const [hoursToGift, setHoursToGift] = useState<number | ''>('')
   const [isPending, setIsPending] = useState(false)
 
-  // MODIFIÉ : Chargement robuste des joueurs bénéficiaires (gère les colonnes de valeurs NULL)
+  // Charger la liste des joueurs disponibles (Exclure les admins et gérer les valeurs de colonnes NULL)
   const { data: gamers, isLoading } = useQuery({
     queryKey: ['admin_available_gift_gamers'],
     queryFn: async () => {
-      // Charger l'ensemble des profils sans filtre SQL restrictif pour éviter les sauts de lignes NULL
       const { data, error } = await supabase
         .from('users_metadata')
         .select('user_id, display_name, is_admin');
       
       if (error) throw error;
 
-      // Filtrer en JS : Exclure uniquement les administrateurs (prend en charge is_admin = true, false ou null)
-      return (data || []).filter(g => g.is_admin !== true);
-    }
+      return (data || []).filter(g => g.user_id !== user?.id && g.is_admin !== true);
+    },
+    enabled: !!user
   });
 
   const handleGiftSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     if (!targetUserId) return toast.error("Sélectionnez un bénéficiaire.", { position: "bottom-center" });
     if (!hoursToGift || hoursToGift <= 0) return toast.error("Montant d'heures invalide.", { position: "bottom-center" });
 
@@ -42,7 +44,6 @@ export function GiftHoursAdmin({ boxClass, boxStyle }: Props) {
 
     setIsPending(true);
     try {
-      // 1. Récupérer le solde actuel de crédit temps du joueur
       const { data: lp, error: fetchErr } = await supabase
         .from('loyalty_points')
         .select('time_credit_minutes')
@@ -54,7 +55,6 @@ export function GiftHoursAdmin({ boxClass, boxStyle }: Props) {
       const giftedMinutes = Number(hoursToGift) * 60;
       const newCreditMinutes = (lp?.time_credit_minutes || 0) + giftedMinutes;
 
-      // 2. Mettre à jour son crédit de temps en base de données
       const { error: updateErr } = await supabase
         .from('loyalty_points')
         .update({ time_credit_minutes: newCreditMinutes })
@@ -62,13 +62,24 @@ export function GiftHoursAdmin({ boxClass, boxStyle }: Props) {
 
       if (updateErr) throw updateErr;
 
-      // 3. Lui envoyer une notification d'alerte festive
+      // Enregistrer l'opération dans la table d'historique des cadeaux d'heures
+      const { error: logErr } = await supabase
+        .from('gift_hours_logs')
+        .insert([{
+          admin_id: user.id,
+          user_id: targetUserId,
+          hours: Number(hoursToGift)
+        }]);
+
+      if (logErr) throw logErr;
+
+      // Envoyer la notification d'alerte avec la formulation exacte de cadeau reçue
       await supabase.from('notifications').insert([{
         user_id: targetUserId,
-        message: `🎁 CADEAU : L'administration vous a offert ${hoursToGift} heure(s) de crédit temps cumulable ! Activez-les depuis votre Espace membre.`
+        message: `Vous avez reçu ${giftedMinutes} minutes d'Evasion !`
       }]);
 
-      toast.success(`Cadeau de ${hoursToGift}h envoyé avec succès !`, {
+      toast.success(`Vous avez offert ${giftedMinutes} minutes.`, {
         position: "bottom-center",
         style: {
           background: '#040405',
@@ -84,10 +95,13 @@ export function GiftHoursAdmin({ boxClass, boxStyle }: Props) {
         }
       });
 
+      // NETTOYAGE IMMÉDIAT ET NET DES CHAMPS APRÈS ENREGISTREMENT RÉUSSI
       setTargetUserId('');
       setHoursToGift('');
+
       queryClient.invalidateQueries({ queryKey: ['admin_users'] });
       queryClient.invalidateQueries({ queryKey: ['loyalty_points'] });
+      queryClient.invalidateQueries({ queryKey: ['gift_hours_logs'] });
     } catch (err: any) {
       console.error(err);
       toast.error(`Échec de l'envoi : ${err.message || err}`, { position: "bottom-center" });

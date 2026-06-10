@@ -5,7 +5,7 @@ export function useLeaderboard() {
   return useQuery({
     queryKey: ['leaderboard'],
     queryFn: async () => {
-      // Requête directe sur la table loyalty_points
+      // Requête directe sur la table loyalty_points (Triée par les Heures d'Échelle de Puissance)
       const { data, error } = await supabase
         .from('loyalty_points')
         .select(`
@@ -15,7 +15,7 @@ export function useLeaderboard() {
           total_hours,
           users_metadata ( avatar_url, is_admin )
         `)
-        .order('points', { ascending: false });
+        .order('total_hours', { ascending: false }); // MODIFIÉ (Tri par les heures)
 
       if (error) {
         console.error("Erreur de récupération du classement :", error.message);

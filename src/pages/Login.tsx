@@ -1,16 +1,27 @@
 import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import { supabase } from '@/lib/supabase'
 import { NeonButton } from '@/components/ui/NeonButton'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { LogIn, Mail, Lock } from 'lucide-react'
+import { LogIn, Mail, Lock, X, Loader2, KeyRound } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
 export function Login() {
-  const { login } = useAuth()
+  const { login, verifyOtpAndCreateProfile, resendVerificationCode } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+
+  // États pour la modale "Mot de passe oublié"
+  const [isForgotOpen, setIsForgotOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+
+  // États pour la validation différée "E-mail non confirmé"
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
+  const [confirmCode, setConfirmCode] = useState('')
+  const [confirmLoading, setConfirmLoading] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -22,7 +33,7 @@ export function Login() {
         style: {
           background: '#040405',
           color: '#ffffff',
-          border: '2px solid hsl(270, 90%, 60%)', // Bordure Néon Violet
+          border: '2px solid hsl(270, 90%, 60%)',
           borderRadius: '1rem',
           boxShadow: '0 0 15px hsl(270, 90%, 60%, 0.4)',
           fontSize: '11px',
@@ -34,14 +45,73 @@ export function Login() {
       });
       navigate({ to: '/dashboard' });
     } catch (error: any) {
-      toast.error("Identifiants incorrects")
+      console.error(error);
+      // Gérer l'état où l'utilisateur n'a pas encore validé son adresse e-mail
+      if (error.message?.includes("Email not confirmed") || error.message?.includes("not confirmed")) {
+        toast.error("Votre adresse e-mail n'a pas encore été vérifiée.", { duration: 5000 })
+        setIsConfirmModalOpen(true) // Ouvrir la modale d'activation OTP
+      } else {
+        toast.error("Identifiants de connexion incorrects")
+      }
     } finally {
       setLoading(false)
     }
   }
 
+  // Traiter la validation tardive de l'OTP
+  const handleConfirmEmailOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (confirmCode.length < 6) return
+
+    setConfirmLoading(true)
+    try {
+      // Valide l'e-mail et crée le profil
+      await verifyOtpAndCreateProfile(email, confirmCode, email.split('@')[0], '')
+      toast.success("E-mail validé avec succès ! Connexion en cours...", { position: "bottom-center" })
+      setIsConfirmModalOpen(false)
+      navigate({ to: '/dashboard' })
+    } catch (err: any) {
+      toast.error(err.message || "Code incorrect ou expiré.")
+    } finally {
+      setConfirmLoading(false)
+    }
+  }
+
+  const handleResendConfirmCode = async () => {
+    try {
+      await resendVerificationCode(email)
+      toast.success("Un nouveau code a été envoyé sur votre e-mail.")
+    } catch (err: any) {
+      toast.error(err.message || "Erreur d'envoi du code.")
+    }
+  }
+
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!forgotEmail.trim()) return
+
+    setForgotLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: window.location.origin + '/reset-password',
+      })
+      if (error) throw error
+
+      toast.success("E-mail de récupération envoyé ! Vérifiez votre boîte de réception.", {
+        position: "bottom-center",
+        duration: 6000
+      })
+      setIsForgotOpen(false)
+      setForgotEmail('')
+    } catch (err: any) {
+      toast.error(err.message || "Erreur lors de l'envoi de l'e-mail.")
+    } finally {
+      setForgotLoading(false)
+    }
+  }
+
   return (
-    <div className="pt-40 pb-24 min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen flex items-center justify-center bg-background px-4 relative">
       <div className="max-w-md w-full glass p-10 rounded-[2.5rem] border-white/5">
         <h1 className="text-3xl font-display uppercase text-center mb-8">Connexion</h1>
         <form onSubmit={handleLogin} className="space-y-6 text-left">
@@ -49,20 +119,132 @@ export function Login() {
             <label className="text-[10px] uppercase font-black text-primary tracking-widest ml-1">Email</label>
             <div className="relative mt-2">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <input required type="email" className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 text-white" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input required type="email" placeholder="Saisir votre adresse Gmail" className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 text-white focus:outline-none focus:border-primary text-xs" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
           </div>
           <div>
-            <label className="text-[10px] uppercase font-black text-primary tracking-widest ml-1">Mot de passe</label>
+            <div className="flex justify-between items-center ml-1">
+              <label className="text-[10px] uppercase font-black text-primary tracking-widest">Mot de passe</label>
+              <button 
+                type="button" 
+                onClick={() => setIsForgotOpen(true)}
+                className="text-[8px] font-black uppercase text-white/40 hover:text-white transition-colors"
+              >
+                Mot de passe oublié ?
+              </button>
+            </div>
             <div className="relative mt-2">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <input required type="password" className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 text-white" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input required type="password" placeholder="Saisir votre mot de passe" className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 text-white focus:outline-none focus:border-primary text-xs" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
           </div>
           <NeonButton disabled={loading} className="w-full py-4">{loading ? "Identification..." : "Accéder au Hub"}</NeonButton>
         </form>
         <p className="mt-8 text-center text-xs text-muted-foreground uppercase">Nouveau ? <Link to="/register" className="text-primary font-bold">Créer un compte</Link></p>
       </div>
+
+      {/* POP-UP : MOT DE PASSE OUBLIÉ */}
+      {isForgotOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
+          <div className="glass p-8 md:p-10 rounded-[2.5rem] border-2 border-primary shadow-neon-violet max-w-sm w-full relative">
+            <button 
+              onClick={() => setIsForgotOpen(false)}
+              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center mx-auto mb-4 border border-primary/30">
+              <Mail className="text-primary animate-pulse" size={24} />
+            </div>
+
+            <h3 className="text-xl font-black uppercase text-primary mb-2">Récupération de compte</h3>
+            <p className="text-[9px] uppercase tracking-widest text-white/40 font-black mb-6">Un e-mail de réinitialisation vous sera envoyé</p>
+
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4 text-left">
+              <div className="space-y-1.5">
+                <label className="text-[9px] uppercase font-black text-white/40 tracking-wider">Saisissez votre e-mail d'inscription</label>
+                <input
+                  required
+                  type="email"
+                  placeholder="nom@exemple.com"
+                  value={forgotEmail}
+                  onChange={e => setForgotEmail(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="pt-2">
+                <NeonButton 
+                  type="submit" 
+                  variant="violet" 
+                  disabled={forgotLoading}
+                  className="w-full py-3 text-[10px] font-black flex items-center justify-center gap-2"
+                >
+                  {forgotLoading && <Loader2 className="animate-spin" size={12} />}
+                  {forgotLoading ? "ENVOI EN COURS..." : "RÉINITIALISER MON MOT DE PASSE"}
+                </NeonButton>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP : ADRESSE E-MAIL NON CONFIRMÉE */}
+      {isConfirmModalOpen && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
+          <div className="glass p-8 md:p-10 rounded-[2.5rem] border-2 border-secondary shadow-neon-cyan max-w-sm w-full relative">
+            <button 
+              onClick={() => setIsConfirmModalOpen(false)}
+              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none"
+            >
+              <X size={20} />
+            </button>
+
+            <div className="w-12 h-12 bg-secondary/20 rounded-xl flex items-center justify-center mx-auto mb-4 border border-secondary/30">
+              <KeyRound className="text-secondary animate-pulse" size={24} />
+            </div>
+
+            <h3 className="text-xl font-black uppercase text-secondary mb-2">Compte non validé</h3>
+            <p className="text-[9px] uppercase tracking-widest text-white/40 font-black mb-6">Saisissez le code reçu sur {email}</p>
+
+            <form onSubmit={handleConfirmEmailOtp} className="space-y-4 text-left">
+              <div className="space-y-1.5">
+                <label className="text-[9px] uppercase font-black text-white/40 tracking-wider">Code à 6 chiffres</label>
+                <input
+                  required
+                  type="text"
+                  maxLength={6}
+                  placeholder="Ex: 123456"
+                  value={confirmCode}
+                  onChange={e => setConfirmCode(e.target.value.replace(/\D/g, ''))}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white text-center font-black tracking-[0.25em]"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 pt-2">
+                <NeonButton 
+                  type="submit" 
+                  variant="cyan" 
+                  disabled={confirmLoading}
+                  className="w-full py-3 text-[10px] font-black flex items-center justify-center gap-2"
+                >
+                  {confirmLoading && <Loader2 className="animate-spin" size={12} />}
+                  {confirmLoading ? "VALIDATION..." : "ACTIVER MON COMPTE"}
+                </NeonButton>
+                
+                <button
+                  type="button"
+                  onClick={handleResendConfirmCode}
+                  className="text-[9px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors text-center"
+                >
+                  Renvoyer un code de validation
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
