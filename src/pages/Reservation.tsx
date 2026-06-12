@@ -16,6 +16,7 @@ import { useLoyalty } from '@/hooks/useLoyalty'
 import { OnboardingModal, OnboardingStep } from '@/components/ui/OnboardingModal'
 import { Map, CalendarDays } from 'lucide-react'
 import { AdminOnboardingModal, AdminOnboardingStep } from '@/components/ui/AdminOnboardingModal'
+import { useNavigate } from '@tanstack/react-router'
 
 
 const DURATIONS = [
@@ -29,14 +30,22 @@ const DURATIONS = [
 
 export function Reservation() {
   const { isAuthenticated, user } = useAuth()
+  const navigate = useNavigate() // AJOUTÉ ICI
   const { reservations, createReservation } = useReservations()
   const { data: metadata } = useUserMetadata() 
   const { data: occupiedStations } = useStationsStatus() 
   const { manualStates, toggleStation } = useStationManagement()
   const { checkWeeklyBonusUsed } = usePrivileges()
   const { data: loyalty } = useLoyalty()
-
   const isAdmin = (metadata as any)?.is_admin;
+
+  // STATES (moved up so they are available for privilege computation)
+  const [selectedStation, setSelectedStation] = useState<string | null>(null)
+  const [selectedDuration, setSelectedDuration] = useState<number>(60)
+  const [totalPrice, setTotalPrice] = useState<number>(1500)
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
+  const [selectedTime, setSelectedTime] = useState<string>('14:00')
+  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false)
 
   // Détermination du VRAI cumul d'heures et du VRAI rang actuel
   const userHours = loyalty?.total_hours || 0
@@ -51,26 +60,51 @@ export function Reservation() {
   const hasUsedWeeklyBonusQuery = checkWeeklyBonusUsed(theoreticalBonus)
   const hasAlreadyUsedWeeklyBonus = hasUsedWeeklyBonusQuery.data || false
 
-  // 3. Application du bonus si éligible (Avec Stacking & Remplacement par l'Elite)
+  // 3. Application du bonus si éligible avec validation de durée de session d'origine
   let privilegeMinutesBonus = 0
   let privilegeAppliedLabel = ''
 
   if (isAuthenticated && !isAdmin) {
-    if ((userRank.name === 'Novice' || userRank.name === 'Amateur') && !hasAlreadyUsedWeeklyBonus) {
-      privilegeMinutesBonus = 15
-      privilegeAppliedLabel = '🎁 Privilège Novice/Amateur : +15 min offertes ajoutées à votre 1ère session de la semaine !'
-    } else if (userRank.name === 'Semi-Pro' && !hasAlreadyUsedWeeklyBonus) {
-      privilegeMinutesBonus = 30
-      privilegeAppliedLabel = '🎁 Privilège Semi-Pro : +30 min offertes ajoutées à votre 1ère session de la semaine !'
-    } else if (userRank.name === 'Pro' || userRank.name === 'Elite') {
-      privilegeMinutesBonus = 15
-      privilegeAppliedLabel = `🎁 Privilège ${userRank.name} : +15 min offertes ajoutées d'office sur toutes vos sessions !`
+    if (userRank.name === 'Novice' || userRank.name === 'Amateur') {
+      if (!hasAlreadyUsedWeeklyBonus) {
+        privilegeMinutesBonus = 15
+        privilegeAppliedLabel = '🎁 Privilège Novice/Amateur : +15 min offertes ajoutées à votre 1ère session de la semaine !'
+      }
+    } else if (userRank.name === 'Semi-Pro') {
+      if (!hasAlreadyUsedWeeklyBonus) {
+        privilegeMinutesBonus = 30
+        privilegeAppliedLabel = '🎁 Privilège Semi-Pro : +30 min offertes ajoutées à votre 1ère session de la semaine !'
+      }
+    } else if (userRank.name === 'Pro') {
+      // Uniquement si la session fait 1 heure minimum (60 min)
+      if (selectedDuration >= 60) {
+        privilegeMinutesBonus = 15
+        privilegeAppliedLabel = '🎁 Privilège Pro : +15 min offertes sur votre session d\'une heure ou plus !'
+      }
+    } else if (userRank.name === 'Elite') {
+      // Uniquement si la session fait 1 heure 30 minutes minimum (90 min)
+      if (selectedDuration >= 90) {
+        privilegeMinutesBonus = 30
+        privilegeAppliedLabel = '🎁 Privilège Elite : +30 min offertes sur votre session d\'une heure 30 min ou plus !'
+      }
     } else if (userRank.name === 'Légende') {
-      privilegeMinutesBonus = 30
-      privilegeAppliedLabel = '🎁 Privilège Légende : +30 min offertes ajoutées d\'office sur toutes vos sessions !'
-    } else if (userRank.name === 'Iconique' || userRank.name === 'Divin') {
-      privilegeMinutesBonus = 60
-      privilegeAppliedLabel = `🎁 Privilège ${userRank.name} : +1h de session offerte ajoutée d'office sur toutes vos sessions !`
+      // Uniquement si la session fait 1 heure 30 minutes minimum (90 min)
+      if (selectedDuration >= 90) {
+        privilegeMinutesBonus = 30
+        privilegeAppliedLabel = '🎁 Privilège Légende : +30 min offertes sur votre session d\'une heure 30 min ou plus !'
+      }
+    } else if (userRank.name === 'Iconique') {
+      // Uniquement si la session fait 2 heures minimum (120 min)
+      if (selectedDuration >= 120) {
+        privilegeMinutesBonus = 60
+        privilegeAppliedLabel = '🎁 Privilège Iconique : +1 heure offerte sur votre session de deux heures ou plus !'
+      }
+    } else if (userRank.name === 'Divin') {
+      // Uniquement sur l'achat du Pack Légende (300 min)
+      if (selectedDuration === 300) {
+        privilegeMinutesBonus = 60
+        privilegeAppliedLabel = '🎁 Privilège Divin : +1 heure offerte sur votre Pack Légende !'
+      }
     }
   }
 
@@ -88,20 +122,14 @@ export function Reservation() {
   const occupancyRate = Math.round((totalOccupied / 10) * 100);
 
   const activeSessions = reservations?.filter((res: any) => res.status === 'en cours') || [];
-  
-  const [selectedStation, setSelectedStation] = useState<string | null>(null)
-  const [selectedDuration, setSelectedDuration] = useState<number>(60)
-  const [totalPrice, setTotalPrice] = useState<number>(1500)
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
-  const [selectedTime, setSelectedTime] = useState<string>('14:00')
-  const [showSuccessModal, setShowSuccessModal] = useState<boolean>(false)
+
 
 
   // LOGIQUE DE CONFIRMATION AVEC ENREGISTREMENT DU BONUS ET NOTIFICATIONS
   const handleBooking = async () => {
     if (!isAuthenticated || !user) { 
       toast.error("Connexion requise pour réserver une session");
-      window.location.href = '/login'; 
+      navigate({ to: '/login' }); // MODIFIÉ ICI
       return; 
     }
     if (!selectedStation) { toast.error('Choisissez un poste'); return; }
@@ -562,21 +590,21 @@ export function Reservation() {
                   </div>
 
                   {/* Raccourcis Terminal Admin */}
-                  <div className="space-y-3 border-t border-white/5 pt-6">
-                    <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Raccourcis Terminal :</p>
-                    <button 
-                      onClick={() => window.location.href = '/salon'}
-                      className="w-full py-3 bg-white/5 border border-white/10 hover:border-primary text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center"
-                    >
-                      Consulter le Salon Live
-                    </button>
-                    <button 
-                      onClick={() => window.location.href = '/scanner'}
-                      className="w-full py-3 bg-primary/20 border border-primary/30 hover:border-primary text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center shadow-neon-violet"
-                    >
-                      Lancer le Scanner
-                    </button>
-                  </div>
+              <div className="space-y-3 border-t border-white/5 pt-6">
+                <p className="text-[10px] font-black uppercase text-white/40 tracking-widest">Raccourcis Terminal :</p>
+                <button 
+                  onClick={() => navigate({ to: '/salon' })} // MODIFIÉ ICI
+                  className="w-full py-3 bg-white/5 border border-white/10 hover:border-primary text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center"
+                >
+                  Consulter le Salon Live
+                </button>
+                <button 
+                  onClick={() => navigate({ to: '/scanner' })} // MODIFIÉ ICI
+                  className="w-full py-3 bg-primary/20 border border-primary/30 hover:border-primary text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all text-center shadow-neon-violet"
+                >
+                  Lancer le Scanner
+                </button>
+              </div>
                 </div>
               )}
             </div>
@@ -597,12 +625,12 @@ export function Reservation() {
               Félicitations ! Votre créneau de jeu sur le poste <span className="text-primary font-bold">{selectedStation}</span> a bien été réservé. Retrouvez tous les détails sur votre espace de membre.
             </p>
             <div className="flex flex-col gap-4">
-              <button 
-                onClick={() => window.location.href = '/dashboard'}
-                className="w-full py-4 bg-primary text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-neon-violet"
-              >
-                Accéder à mon espace
-              </button>
+          <button 
+            onClick={() => navigate({ to: '/dashboard' })} // MODIFIÉ ICI
+            className="w-full py-4 bg-primary text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all shadow-neon-violet"
+          >
+            Accéder à mon espace
+          </button>
               <button 
                 onClick={() => { setShowSuccessModal(false); setSelectedStation(null); }}
                 className="text-[10px] font-black uppercase text-white/40 tracking-widest hover:text-white transition-colors"

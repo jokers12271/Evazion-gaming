@@ -160,16 +160,26 @@ export function useResumeTeamSession() {
   })
 }
 
-// AJOUTÉ : Mutation de suppression d'une session d'équipe (Admin)
+// AJOUTÉ : Mutation de suppression d'une session d'équipe (Admin - Avec nettoyage des clés étrangères)
 export function useDeleteTeamSession() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: async (id: string) => {
+      // A. Supprimer d'abord les membres liés pour éviter la violation de clé étrangère
+      const { error: membersErr } = await supabase
+        .from('team_session_members')
+        .delete()
+        .eq('team_session_id', id)
+
+      if (membersErr) throw membersErr
+
+      // B. Supprimer ensuite la session d'équipe parente
       const { error } = await supabase
         .from('team_sessions')
         .delete()
         .eq('id', id)
+
       if (error) throw error
     },
     onSuccess: () => {

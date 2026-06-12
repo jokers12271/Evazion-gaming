@@ -32,7 +32,7 @@ export function News() {
         title,
         excerpt,
         category,
-        image: imageUrl || 'https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?q=80&w=800'
+        image: imageUrl || '/blason.png' // Image par défaut si aucun URL fourni
       })
       toast.success("Article publié !")
       setShowAddForm(false)
@@ -75,7 +75,7 @@ export function News() {
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background z-10" />
         <img 
-          src="https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=1600" 
+          src="https://cdn.vectorstock.com/i/500p/03/69/broadcasting-and-live-news-tags-cloud-words-mix-vector-37050369.jpg" 
           className="w-full h-full object-cover opacity-20" 
           alt="news backdrop"
         />
@@ -160,7 +160,7 @@ export function News() {
                      </div>
                    ) : (
                      // Image par défaut de l'article si actualité standard
-                     <img src={item.image} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
+                     <img src="/blason.png" alt="blason" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-100" />
                    )}
 
                    <div className="absolute top-4 left-4 bg-secondary text-black text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg">
@@ -220,12 +220,19 @@ export function News() {
             </button>
 
             {/* Image de l'article */}
-            <div className="aspect-[16/10] sm:aspect-[16/9] w-full rounded-2xl overflow-hidden relative border border-white/10 shrink-0">
-              <img src={selectedArticle.image} alt={selectedArticle.title} className="w-full h-full object-cover" />
-              <div className="absolute top-4 left-4 bg-secondary text-black text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg">
-                {selectedArticle.category}
-              </div>
-            </div>
+        <div className="aspect-[16/10] sm:aspect-[16/9] w-full rounded-2xl overflow-hidden relative border border-white/10 shrink-0">
+          <img 
+            src={selectedArticle.category === 'Ragnarok' || selectedArticle.title?.toUpperCase().includes('RAGNAROK')
+              ? '/ragnarok.jpg'
+              : selectedArticle.image
+            } 
+            alt={selectedArticle.title} 
+            className="w-full h-full object-cover" 
+          />
+          <div className="absolute top-4 left-4 bg-secondary text-black text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg">
+            {selectedArticle.category}
+          </div>
+        </div>
 
             {/* Titre & Date */}
             <div className="space-y-3">

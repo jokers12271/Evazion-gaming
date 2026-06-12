@@ -10,11 +10,13 @@ import { useReservations } from '@/hooks/useReservations'
 import { useUserMetadata, useToggleBanPlayer } from '@/hooks/useUserMetadata' // AJOUTÉ
 import { AdminOnboardingModal, AdminOnboardingStep } from '@/components/ui/AdminOnboardingModal'
 import { ShieldAlert } from 'lucide-react'
+import { usePrivileges } from '@/hooks/usePrivileges'
 
 export function PlayerDetail() {
   const { playerId } = useParams({ from: '/dashboard/player/$playerId' })
   const navigate = useNavigate()
   const { createReservation } = useReservations()
+  const { checkWeeklyBonusUsed } = usePrivileges() // AJOUTÉ ICI
   const { data: adminMetadata } = useUserMetadata() // AJOUTÉ : Pour vérifier si l'utilisateur connecté est admin
   const toggleBanPlayer = useToggleBanPlayer() // AJOUTÉ
 
@@ -39,13 +41,76 @@ export function PlayerDetail() {
   const loyalty = Array.isArray(player.loyalty_points) ? player.loyalty_points[0] : player.loyalty_points;
   const rank = getRank(loyalty?.total_hours || 0)
 
+  // Calcul théorique du bonus hebdomadaire de première session du joueur scanné
+  const theoreticalBonus = 
+    rank.name === 'Novice' || rank.name === 'Amateur' ? 15 : 
+    rank.name === 'Semi-Pro' ? 30 : 0
+
+  // Vérifier si le joueur scanné a déjà utilisé son bonus cette semaine
+  const hasUsedWeeklyBonusQuery = checkWeeklyBonusUsed(theoreticalBonus, playerId)
+  const hasAlreadyUsedWeeklyBonus = hasUsedWeeklyBonusQuery.data || false
+
+  // Détermination finale du temps bonus à appliquer d'office selon les règles strictes de durée
+  let privilegeMinutesBonus = 0
+  let privilegeAppliedLabel = ''
+
+  // Nous lirons la durée saisie par le gérant lors de handleQuickStart
+
   const handleQuickStart = async () => {
     const station = window.prompt("Numéro de station ? (Ex: PS5_1)")
     const minutes = window.prompt("Durée en minutes ? (Ex: 60)")
     
     if (station && minutes) {
+      const baseMinutes = parseInt(minutes)
+      let evaluatedBonus = 0;
+      let label = '';
+
+      // ÉVALUATION STRICTE DES CRITÈRES DE DURÉE DE SESSION
+      if (rank.name === 'Novice' || rank.name === 'Amateur') {
+        if (!hasAlreadyUsedWeeklyBonus) {
+          evaluatedBonus = 15;
+          label = 'Bonus de Première session hebdomadaire Novice/Amateur';
+        }
+      } else if (rank.name === 'Semi-Pro') {
+        if (!hasAlreadyUsedWeeklyBonus) {
+          evaluatedBonus = 30;
+          label = 'Bonus de Première session hebdomadaire Semi-Pro';
+        }
+      } else if (rank.name === 'Pro') {
+        // Uniquement si la session fait 1 heure minimum (60 min)
+        if (baseMinutes >= 60) {
+          evaluatedBonus = 15;
+          label = 'Bonus Permanent Pro';
+        }
+      } else if (rank.name === 'Elite') {
+        // Uniquement si la session fait 1 heure 30 minutes minimum (90 min)
+        if (baseMinutes >= 90) {
+          evaluatedBonus = 30;
+          label = 'Bonus Permanent Elite';
+        }
+      } else if (rank.name === 'Légende') {
+        // Uniquement si la session fait 1 heure 30 minutes minimum (90 min)
+        if (baseMinutes >= 90) {
+          evaluatedBonus = 30;
+          label = 'Bonus Permanent Légende';
+        }
+      } else if (rank.name === 'Iconique') {
+        // Uniquement si la session fait 2 heures minimum (120 min)
+        if (baseMinutes >= 120) {
+          evaluatedBonus = 60;
+          label = 'Bonus Permanent Iconique';
+        }
+      } else if (rank.name === 'Divin') {
+        // Uniquement sur l'achat du Pack Légende (300 min)
+        if (baseMinutes === 300) {
+          evaluatedBonus = 60;
+          label = 'Bonus Permanent Divin';
+        }
+      }
+
+      const finalDuration = baseMinutes + evaluatedBonus
       const start = new Date().toISOString()
-      const end = new Date(Date.now() + parseInt(minutes) * 60000).toISOString()
+      const end = new Date(Date.now() + finalDuration * 60000).toISOString()
       
       try {
         await createReservation.mutateAsync({
@@ -53,16 +118,27 @@ export function PlayerDetail() {
           start_time: start,
           end_time: end,
           display_name: player.display_name,
-          status: 'pending', // MODIFIÉ : Créée en attente pour être démarrée manuellement (Play)
-          user_id: playerId // On force l'ID du joueur scanné
+          status: 'pending',
+          user_id: playerId,
+          bonus_minutes_applied: evaluatedBonus // Enregistre le bonus appliqué
         })
-        toast.success(`Session de ${minutes}min créée sur ${station}. Activez-la sur le Dashboard !`)
+
+        // Alerter le joueur d'un pop-up visuel et sonore
+        if (evaluatedBonus > 0) {
+          await supabase.from('notifications').insert([{
+            user_id: playerId,
+            message: `Félicitations ! Vos +${evaluatedBonus} min de privilège de Rang (${label}) ont été automatiquement ajoutées à votre session sur ${station}.`
+          }])
+        }
+
+        toast.success(`Session de ${baseMinutes}min + ${evaluatedBonus}min de bonus créée sur ${station}. Activez-la sur le Dashboard !`)
         navigate({ to: '/dashboard' })
       } catch (e) {
         toast.error("Erreur lors du lancement")
       }
     }
   }
+
 
   const adminOnboardingSteps: AdminOnboardingStep[] = [
     {
@@ -95,7 +171,15 @@ export function PlayerDetail() {
             <div className={cn("mt-4 px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-lg", rank.bg, rank.label, rank.border)}>
               Rang {rank.name}
             </div>
+
+            {/* BANDEAU D'INFORMATION DU BONUS SÉCURISÉ POUR LE GÉRANT (AJOUTÉ) */}
+            {privilegeMinutesBonus > 0 && (
+              <div className="mt-6 bg-primary/10 border border-primary/20 px-4 py-2.5 rounded-2xl text-[9px] font-black uppercase text-primary tracking-widest animate-pulse max-w-sm mx-auto">
+                {privilegeAppliedLabel}
+              </div>
+            )}
           </div>
+        
 
           <div className="grid grid-cols-2 gap-6 mb-12">
             <div className="glass bg-white/5 p-6 rounded-3xl text-center border border-white/5">

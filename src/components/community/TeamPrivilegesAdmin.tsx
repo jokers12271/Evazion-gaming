@@ -60,6 +60,7 @@ export function TeamPrivilegesAdmin() {
               <option value="Naruto" className="bg-background">Team - Naruto</option>
               <option value="Fortnite" className="bg-background">Team - Fortnite</option>
               <option value="2K NBA" className="bg-background">Team - 2K NBA</option>
+              <option value="Mortal Kombat" className="bg-background">Team - Mortal Kombat</option>
             </select>
           </div>
 

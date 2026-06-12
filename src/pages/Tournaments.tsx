@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import { useTournaments, Tournament } from '@/hooks/useTournaments'
 import { useTournamentParticipation, useMyTournamentRequest } from '@/hooks/useTournamentParticipation'
 import { useUserMetadata } from '@/hooks/useUserMetadata'
@@ -26,6 +27,7 @@ function TournamentCard({ tourney, isAdmin, onDelete, onEdit, userRank }: {
   userRank: any
 }) {
   const { user } = useAuth();
+  const navigate = useNavigate(); // AJOUTEZ CETTE LIGNE ICI
   const [showConditions, setShowConditions] = useState(false);
   const [showRegModal, setShowRegModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
@@ -121,11 +123,30 @@ function TournamentCard({ tourney, isAdmin, onDelete, onEdit, userRank }: {
           {/* DISCIPLINE MINIATURISÉE SUR MOBILE */}
           <p className="text-secondary font-black text-[10px] md:text-xs uppercase tracking-[0.2em] mb-4 md:mb-6">Discipline : {tourney.game}</p>
 
-          {/* DATES ET JOUEURS MINIATURISÉS SUR MOBILE (gap-3 mb-4 text-[9px]) */}
-          <div className="flex flex-wrap gap-3 md:gap-6 mb-5 md:mb-8 text-[9px] md:text-[10px] uppercase font-black text-white/70 tracking-widest">
-            <span className="flex items-center gap-1.5"><Calendar size={12}/> {tourney.date ? format(new Date(tourney.date), 'dd MMMM yyyy', { locale: fr }) : 'À CONFIRMER'}</span>
-            <span className="flex items-center gap-1.5"><Users size={12}/> {participants?.length || 0} JOUEURS</span>
-          </div>
+          {/* DATES ET JOUEURS MINIATURISÉS SUR MOBILE */}
+      <div className="flex flex-wrap gap-3 md:gap-6 mb-5 md:mb-8 text-[9px] md:text-[10px] uppercase font-black text-white/70 tracking-widest">
+        <span className="flex items-center gap-1.5"><Calendar size={12}/> {tourney.date ? format(new Date(tourney.date), 'dd MMMM yyyy', { locale: fr }) : 'À CONFIRMER'}</span>
+        <span className="flex items-center gap-1.5"><Users size={12}/> {participants?.length || 0} JOUEURS</span>
+      </div>
+
+      {/* LISTE PERMANENTE DES COMPÉTITEURS INSCRITS (AJOUTÉ) */}
+      <div className="relative z-10 mb-6 bg-black/40 p-4 rounded-2xl border border-white/5 backdrop-blur-sm">
+        <p className="text-[9px] font-black uppercase text-white/40 tracking-wider mb-2">Compétiteurs confirmés ({participants?.length || 0}) :</p>
+        <div className="flex flex-wrap gap-1.5 max-h-[70px] overflow-y-auto pr-1 custom-scrollbar">
+          {participants?.map((p: any, i: number) => (
+            <span 
+              key={i} 
+              className="text-[9px] font-bold bg-white/5 px-2.5 py-1 rounded-lg border border-white/5 text-white/80 animate-fade-in"
+              translate="no"
+            >
+              @{p.display_name}
+            </span>
+          ))}
+          {(!participants || participants.length === 0) && (
+            <p className="text-[9px] italic text-white/20 uppercase tracking-widest">Aucun compétiteur inscrit</p>
+          )}
+        </div>
+      </div>
 
           {/* TARIFS DE TOURNOIS AVEC REMISES DE RANG (AJOUTÉ) */}
           <div className="relative z-10 mb-4 md:mb-6 flex justify-between items-center text-[9px] font-black uppercase tracking-wider">
@@ -135,16 +156,19 @@ function TournamentCard({ tourney, isAdmin, onDelete, onEdit, userRank }: {
               let finalFee = baseFee;
               let isDiscounted = false;
 
-              if (userRank.name === 'Pro' || userRank.name === 'Elite') {
-                finalFee = Math.round(baseFee * 0.75);
-                isDiscounted = true;
-              } else if (userRank.name === 'Légende') {
-                finalFee = Math.round(baseFee * 0.50);
-                isDiscounted = true;
-              } else if (userRank.name === 'Iconique' || userRank.name === 'Divin') {
-                finalFee = 0;
-                isDiscounted = true;
-              }
+              if (userRank.name === 'Pro') {
+            finalFee = Math.round(baseFee * 0.85); // -15%
+            isDiscounted = true;
+          } else if (userRank.name === 'Elite' || userRank.name === 'Légende') {
+            finalFee = Math.round(baseFee * 0.75); // -25%
+            isDiscounted = true;
+          } else if (userRank.name === 'Iconique') {
+            finalFee = Math.round(baseFee * 0.50); // -50%
+            isDiscounted = true;
+          } else if (userRank.name === 'Divin') {
+            finalFee = 0; // GRATUIT
+            isDiscounted = true;
+          }
 
               return (
                 <span className="text-white/40 flex items-center gap-1.5">
@@ -178,7 +202,7 @@ function TournamentCard({ tourney, isAdmin, onDelete, onEdit, userRank }: {
           ) : (
             <NeonButton 
               className={cn("w-full py-3 md:py-4 transition-all duration-500 text-[10px] md:text-xs font-black tracking-widest", user && myRequest?.status === 'approved' && "opacity-50 pointer-events-none grayscale")} 
-              onClick={() => { if (!user) { window.location.href = '/login'; } else { setShowConditions(true); } }}
+              onClick={() => { if (!user) { navigate({ to: '/login' }); } else { setShowConditions(true); } }} // MODIFIÉ ICI
               variant={user && myRequest?.status === 'approved' ? "ghost" : "violet"}
             >
               {!user ? <span>Se connecter pour s'inscrire</span> : myRequest?.status === 'pending' ? <span className="text-yellow-500 animate-pulse">Demande en attente</span> : myRequest?.status === 'approved' ? <span className="flex items-center justify-center gap-2"><CheckCircle2 size={16} className="text-white shrink-0" /> Déjà Inscrit</span> : <span translate="no">S'inscrire au tournoi</span>}
@@ -278,7 +302,7 @@ export function Tournaments() {
     <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen bg-background text-center relative overflow-hidden animate-fade-in">
        <div className="absolute inset-0 z-0 pointer-events-none">
          <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background z-10" />
-         <img src="https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1600" className="w-full h-full object-cover opacity-25" alt="tournaments" />
+         <img src="/blason.png" className="w-full h-full object-cover opacity-25" alt="tournaments" />
        </div>
        <div className="container mx-auto px-5 max-w-7xl relative z-20">
           <header className="mb-20 text-center">

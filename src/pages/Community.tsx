@@ -34,20 +34,24 @@ const TEAMS = [
   { id: 'GTA', name: 'Team - GTA', tagline: 'Les braqueurs et pilotes hors-pair de Los Santos.', color: '#a855f7', border: 'hover:border-purple-500/40', glow: 'shadow-purple-500/20', image: 'https://www.keycense.com/_next/image?url=https%3A%2F%2Ffirebasestorage.googleapis.com%2Fv0%2Fb%2Fkeycense.appspot.com%2Fo%2Fproducts%252F6826e508ef47456f98f21bb9.jpg%3Falt%3Dmedia%26token%3Dca4d55bd-6f96-4fd5-b0fc-5d9c64cc1a59&w=3840&q=60' },
   { id: 'Naruto', name: 'Team - Naruto', tagline: 'Ninja de Konoha, maîtrisez votre chakra au combat.', color: '#f97316', border: 'hover:border-orange-500/40', glow: 'shadow-orange-500/20', image: 'https://image.api.playstation.com/vulcan/ap/rnd/202307/3118/20233826622f18fdc7d19d4138a67323050dc44f23d0dc26.jpg' },
   { id: 'Fortnite', name: 'Team - Fortnite', tagline: 'Construction rapide, top 1 et danses légendaires.', color: '#06b6d4', border: 'hover:border-cyan-500/40', glow: 'shadow-cyan-500/20', image: 'https://cms-assets.unrealengine.com/cm6l5gfpm05kr07my04cqgy2x/output=format:webp/cmhkq5qwo2mid07on940m6a7k' },
-  { id: '2K NBA', name: 'Team - 2K NBA', tagline: 'Dunk, drible et paniers à trois points sur le parquet.', color: '#eab308', border: 'hover:border-yellow-500/40', glow: 'shadow-yellow-500/20', image: 'https://www.lockercodes.com/wp-content/uploads/NBA-2K26-Locker-Codes.jpg' }
+  { id: '2K NBA', name: 'Team - 2K NBA', tagline: 'Dunk, drible et paniers à trois points sur le parquet.', color: '#eab308', border: 'hover:border-yellow-500/40', glow: 'shadow-yellow-500/20', image: 'https://www.lockercodes.com/wp-content/uploads/NBA-2K26-Locker-Codes.jpg' },
+  { id: 'Mortal Kombat', name: 'Team - Mortal Kombat', tagline: 'Rejoignez le combat suprême de l’Earthrealm. Fatality !', color: '#dc2626', border: 'hover:border-red-600/40', glow: 'shadow-red-600/20', image: 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1971870/library_600x900.jpg' } // AJOUTÉ ICI
 ]
+
 
 export function Community() {
   const { data: leaders, isLoading } = useLeaderboard()
   const { user } = useAuth() // AJOUTÉ
   const { data: metadata } = useUserMetadata() // AJOUTÉ
   const updateCommunityMutation = useUpdateCommunity() // AJOUTÉ
+  const [leftTeamName, setLeftTeamName] = useState<string | null>(null) // AJOUTÉ ICI
 
   const { data: loyalty } = useLoyalty() // AJOUTÉ : Lecture du cumul de fidélité
   const userRank = getRank(loyalty?.total_hours || 0) // Détermination du Rang
 
   const currentTeam = (metadata as any)?.community_team || null
   const isAdmin = (metadata as any)?.is_admin || false // AJOUTÉ
+  const userDisplayName = (metadata as any)?.display_name || (user as any)?.email || 'Joueur'
   const [joinedTeamName, setJoinedTeamName] = useState<string | null>(null) // AJOUTÉ
   
   // AJOUTÉS : États de gestion d'adhésion payante (Multi-teams 3 Max)
@@ -114,8 +118,9 @@ export function Community() {
     if (!confirm(`Voulez-vous vraiment quitter la Team ${teamId} ? Vos statistiques de victoires sur cette équipe seront perdues.`)) return;
 
     try {
-      await leaveTeam.mutateAsync(teamId); // MODIFIÉ : Quitte uniquement l'équipe demandée
-      toast.success(`Vous avez quitté la Team ${teamId}.`, { position: "bottom-center" });
+      // Transmission du teamId et du pseudo de gamer pour la notification admin
+      await leaveTeam.mutateAsync({ teamId, displayName: metadata?.display_name || 'Gamer' });
+      setLeftTeamName(teamId); // Ouvre le pop-up visuel de confirmation pour le joueur
     } catch (err) {
       toast.error("Échec du départ de la Team", { position: "bottom-center" });
     }
@@ -167,7 +172,7 @@ export function Community() {
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background z-10" />
         <img 
-          src="https://images.unsplash.com/photo-1511512578047-dfb367046420?q=80&w=1600" 
+          src="/blason.png" 
           className="w-full h-full object-cover opacity-20" 
           alt="community social backdrop"
         />
@@ -382,13 +387,13 @@ export function Community() {
 
                             {/* Bouton de Renouvellement (CORRIGÉ ET OPÉRATIONNEL) */}
                             <button
-                              onClick={() => {
-                                if (!isPendingRenewal && confirm(`Confirmer la demande de renouvellement de votre cotisation pour la Team ${team.id} ?`)) {
-                                  requestRenewal.mutate(team.id); // <--- MUTATION APPELÉE CORRECTEMENT (CORRIGÉ !)
-                                }
-                              }}
-                              disabled={isPendingRenewal}
-                              className={cn(
+                          onClick={() => {
+                            if (!isPendingRenewal && confirm(`Confirmer la demande de renouvellement de votre cotisation pour la Team ${team.id} ?`)) {
+                              requestRenewal.mutate({ teamId: team.id, displayName: metadata?.display_name || 'Gamer' }); // MODIFIÉ ICI
+                            }
+                          }}
+                          disabled={isPendingRenewal}
+                          className={cn(
                                 "flex-1 py-2 text-[8px] font-black uppercase tracking-wider rounded-xl border transition-all duration-300",
                                 isPendingRenewal 
                                   ? "border-yellow-500/20 bg-yellow-500/5 text-yellow-500 cursor-not-allowed animate-pulse" 
@@ -523,6 +528,35 @@ export function Community() {
               variant="cyan"
               className="w-full py-4 text-xs font-black"
               onClick={() => setJoinedTeamName(null)}
+            >
+              Fermer
+            </NeonButton>
+          </div>
+        </div>
+      )}
+
+      {/* POP-UP CONFIRMATION DÉPART DE TEAM (AJOUTÉ) */}
+      {leftTeamName && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
+          <div className="glass p-10 rounded-[2.5rem] border-2 border-red-500 shadow-[0_0_30px_rgba(239,68,68,0.25)] max-w-md w-full relative">
+            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-red-500/30">
+              <Users className="text-red-500 animate-pulse" size={32} />
+            </div>
+            
+            <h3 className="text-2xl font-black uppercase mb-2">Team Quittée</h3>
+            <p className="text-[10px] uppercase font-black tracking-widest text-red-500 mb-6">Team - {leftTeamName}</p>
+            
+            <div className="bg-black/50 border border-white/5 rounded-3xl p-6 mb-8 text-center backdrop-blur-sm">
+              <p className="text-xs font-bold italic leading-relaxed text-white/80">
+                Vous avez bien quitté la Team {leftTeamName}. Vos accès à ses privilèges exclusifs ont été révoqués avec succès.
+              </p>
+            </div>
+
+            <NeonButton 
+              variant="ghost"
+              className="w-full py-4 text-xs font-black"
+              style={{ borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}
+              onClick={() => setLeftTeamName(null)}
             >
               Fermer
             </NeonButton>

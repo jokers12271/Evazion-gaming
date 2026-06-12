@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from '@tanstack/react-router' // AJOUTEZ CETTE LIGNE ICI
 import { useQuery } from '@tanstack/react-query'
 import { useRewards, Reward } from '@/hooks/useRewards'
 import { useLoyalty } from '@/hooks/useLoyalty'
@@ -17,6 +18,7 @@ import { Edit } from 'lucide-react'
 
 export function Store() {
   const { user } = useAuth()
+  const navigate = useNavigate() // AJOUTEZ CETTE LIGNE ICI
   const { data: loyalty } = useLoyalty()
   const { data: metadata } = useUserMetadata()
   const { rewards, addReward, updateReward, deleteReward, claimReward } = useRewards()
@@ -25,7 +27,7 @@ export function Store() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('reward_claims')
-        .select('*')
+        .select('*, rewards(mani_cost)') // Récupère le prix de l'article lié
       if (error) throw error
       return data
     }
@@ -138,7 +140,7 @@ export function Store() {
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/80 to-background z-10" />
         <img 
-          src="https://images.unsplash.com/photo-1550745165-9bc0b252726f?q=80&w=1600" 
+          src="https://mir-s3-cdn-cf.behance.net/project_modules/1400/5d9cbc130191973.617aa5adeb767.jpg" 
           className="w-full h-full object-cover opacity-20" 
           alt="store gear backdrop"
         />
@@ -153,19 +155,20 @@ export function Store() {
           {/* LE SOLDE / LOG DE VENTES MINIATURISÉ ET RÉACTIF SUR MOBILE (CORRIGÉ) */}
           {user ? (
             isAdmin ? (
-              /* A. VUE ADMIN : VENTES TOTALES */
-              <div className="mt-6 md:mt-8 inline-flex items-center gap-4 glass px-5 md:px-10 py-3 md:py-5 rounded-2xl md:rounded-full border-white/5 shadow-2xl animate-fade-in">
-                <div className="flex items-baseline gap-2 md:gap-4 font-display font-black uppercase tracking-widest text-white">
-                  <span className="text-xl md:text-3xl opacity-80">VENDU =</span>
-                  <span className="text-3xl md:text-5xl flex items-center gap-2 text-green-500">
-                    {claims?.filter((c: any) => c.status === 'livré').length || 0}
-                    <div className="w-8 h-8 md:w-12 md:h-12 rounded-full overflow-hidden border-2 border-primary shadow-neon-violet shrink-0 relative">
-                       <img src="/mani.jpg" alt="M" className="w-full h-full object-cover scale-110" />
-                       <div className="absolute inset-0 shadow-[inset_0_0_4px_rgba(0,0,0,0.8)] pointer-events-none" />
-                    </div>
-                  </span>
+              /* A. VUE ADMIN : VENTES TOTALES (SOMME DES MANIS COLLECTÉS) */
+          <div className="mt-6 md:mt-8 inline-flex items-center gap-4 glass px-5 md:px-10 py-3 md:py-5 rounded-2xl md:rounded-full border-white/5 shadow-2xl animate-fade-in">
+            <div className="flex items-baseline gap-2 md:gap-4 font-display font-black uppercase tracking-widest text-white">
+              <span className="text-xl md:text-3xl opacity-80">VENDU =</span>
+              <span className="text-3xl md:text-5xl flex items-center gap-2 text-green-500">
+                {claims?.filter((c: any) => c.status === 'livré')
+                  .reduce((sum: number, c: any) => sum + (c.rewards?.mani_cost || 0), 0) || 0} {/* MODIFIÉ ICI */}
+                <div className="w-8 h-8 md:w-12 md:h-12 rounded-full overflow-hidden border-2 border-primary shadow-neon-violet shrink-0 relative">
+                   <img src="/mani.jpg" alt="M" className="w-full h-full object-cover scale-110" />
+                   <div className="absolute inset-0 shadow-[inset_0_0_4px_rgba(0,0,0,0.8)] pointer-events-none" />
                 </div>
-              </div>
+              </span>
+            </div>
+          </div>
             ) : (
               /* B. VUE JOUEUR : SOLDE DE MANI */
               <div className="mt-6 md:mt-8 inline-flex items-center gap-4 glass px-5 md:px-10 py-3 md:py-5 rounded-2xl md:rounded-full border-white/5 shadow-2xl animate-fade-in">
@@ -324,17 +327,17 @@ export function Store() {
                   })()}
                   
                   <NeonButton 
-                    variant={user ? (points >= item.mani_cost ? "violet" : "ghost") : "violet"}
-                    disabled={user ? (!loyalty || points < item.mani_cost || claimReward.isPending || isAdmin) : false}
-                    onClick={() => {
-                      if (!user) {
-                        window.location.href = '/login';
-                      } else {
-                        handleBuy(item);
-                      }
-                    }}
-                    className="px-4 py-2.5 md:px-6 md:py-2 text-[9px] md:text-[10px] font-black tracking-widest uppercase shrink-0"
-                  >
+                variant={user ? (points >= item.mani_cost ? "violet" : "ghost") : "violet"}
+                disabled={user ? (!loyalty || points < item.mani_cost || claimReward.isPending || isAdmin) : false}
+                onClick={() => {
+                  if (!user) {
+                    navigate({ to: '/login' }); // MODIFIÉ ICI
+                  } else {
+                    handleBuy(item);
+                  }
+                }}
+                className="px-4 py-2.5 md:px-6 md:py-2 text-[9px] md:text-[10px] font-black tracking-widest uppercase shrink-0"
+              >
                     {isAdmin ? "MODE ADMIN" : (!user ? "ÉCHANGER" : (points >= item.mani_cost ? "ÉCHANGER" : "SOLDE BAS"))}
                   </NeonButton>
                 </div>
@@ -344,20 +347,31 @@ export function Store() {
         )}
       </div>
 
-      {/* AJOUTÉ : Pop-up de confirmation d'achat de la boutique */}
+      {/* AJOUTÉ : Pop-up de confirmation d'achat de la boutique (Différencié Physique / Virtuel) */}
       {purchasedItem && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center">
-          <div className="glass p-10 rounded-[2.5rem] border-2 border-secondary shadow-neon-cyan max-w-md w-full relative">
-            <div className="w-16 h-16 bg-secondary/20 rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="glass p-10 rounded-[2.5rem] border-2 border-secondary shadow-neon-cyan max-w-md w-full relative" style={{ borderColor: 'var(--secondary)' }}>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-secondary/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="w-16 h-16 bg-secondary/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-secondary/30">
               <ShoppingBag className="text-secondary animate-pulse" size={40} />
             </div>
-            <h3 className="text-2xl font-display font-black uppercase text-white mb-4">Achat Validé !</h3>
+            <h3 className="text-2xl font-display font-black uppercase text-white mb-4">
+              {purchasedItem.action_type === 'none' ? "Commande Enregistrée !" : "Achat Validé !"}
+            </h3>
             <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-              Félicitations ! Vous avez échangé vos MANI contre l'article <span className="text-secondary font-bold">{purchasedItem.name}</span>. Présentez-vous à l'accueil de la salle de jeux pour le récupérer.
+              {purchasedItem.action_type === 'none' ? (
+                <>
+                  Félicitations ! Votre commande pour l'article <span className="text-secondary font-bold">{purchasedItem.name}</span> a été prise en compte. Veuillez vous présenter à l'accueil du Sanctuary pour la récupérer physiquement.
+                </>
+              ) : (
+                <>
+                  Félicitations ! Vous avez échangé vos MANI contre l'article <span className="text-secondary font-bold">{purchasedItem.name}</span>. Votre privilège virtuel a bien été activé d'office.
+                </>
+              )}
             </p>
             <NeonButton 
               variant="cyan"
-              className="w-full py-4 text-xs font-black tracking-widest"
+              className="w-full py-4 text-xs font-black shadow-neon-cyan"
               onClick={() => setPurchasedItem(null)}
             >
               Fermer

@@ -161,9 +161,11 @@ export function useRewards() {
         await supabase.from('users_metadata').update({ tournament_discount_percent: percent, tournament_discount_until: oneMonthFromNow.toISOString() }).eq('user_id', userId);
       }
 
-      // F. Enregistrer la transaction au statut 'livré' (car l'effet virtuel est déjà appliqué)
+      // F. Enregistrer la transaction : 'en attente' pour les objets physiques (none), 'livré' pour les effets virtuels/droits
+      const finalStatus = actionType === 'none' ? 'en attente' : 'livré';
+
       const { error } = await supabase.from('reward_claims').insert([
-        { reward_id: rewardId, user_id: userId, display_name: displayName, status: 'livré' }
+        { reward_id: rewardId, user_id: userId, display_name: displayName, status: finalStatus }
       ])
       if (error) throw error
     },

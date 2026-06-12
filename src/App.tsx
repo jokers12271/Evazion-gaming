@@ -31,6 +31,7 @@ import { useTeamSessions, useActiveTeamSession, useUpdateTeamSessionStatus, useD
 import { useRagnarok } from './hooks/useRagnarok' // AJOUTÉ : Import du hook de défis
 import { ResetPassword } from './pages/ResetPassword'
 import { Bell, X, CheckCircle2, Swords, Gift, Coins, Clock } from 'lucide-react'
+import { Toaster as HotToaster } from 'react-hot-toast' // AJOUTÉ ICI
 
 
 // 1. Définition du contexte du routeur pour TypeScript
@@ -108,14 +109,20 @@ function GlobalAdminNotifier() {
 }
 
 // ÉCOUTEUR ET POP-UP D'ALERTES EN DIRECT (CORRIGÉ AVEC SONNERIE & MODALE DE TRANSFERS)
+// ÉCOUTEUR ET POP-UP D'ALERTES EN DIRECT (AVEC SÉCURITÉ AUDIO ET ACCENTS)
+// ÉCOUTEUR ET POP-UP D'ALERTES EN DIRECT (AVEC MODALES D'ACTIONS UNIVERSELLES & FILTRAGE LOCAL)
+// ÉCOUTEUR ET POP-UP D'ALERTES EN DIRECT (AVEC CORRECTIONS DE COULEURS ET DE CONCURRENCE)
 function GlobalNotificationListener() {
   const { user } = useAuth()
+  const { data: metadata } = useUserMetadata() // AJOUTÉ ICI
+  const isAdmin = (metadata as any)?.is_admin || false; // AJOUTÉ ICI
   const navigate = useNavigate()
   const [activeGiftModal, setActiveGiftModal] = useState<{ minutes: number } | null>(null)
   const [activeCommunityResponseModal, setActiveCommunityResponseModal] = useState<{ status: 'approved' | 'rejected', teamId: string } | null>(null)
+  const [activeRenewalResponseModal, setActiveRenewalResponseModal] = useState<{ status: 'approved' | 'rejected', teamId: string } | null>(null)
   const [activeRagnarokInvite, setActiveRagnarokInvite] = useState<{ id: string; message: string } | null>(null)
+  const [activeGenericModal, setActiveGenericModal] = useState<{ message: string; isSuccess: boolean } | null>(null)
   
-  // NOUVEL ÉTAT POUR LES POP-UPS DE TRANSFERT DE MANI / MINUTES (AJOUTÉ)
   const [activeTransferModal, setActiveTransferModal] = useState<{
     amount: number;
     partner: string;
@@ -128,33 +135,43 @@ function GlobalNotificationListener() {
     if (!user) return;
 
     const channel = supabase
-      .channel(`user-sound-notifications-${user.id}`)
+      .channel('user-sound-notifications-broadcast')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`
+          table: 'notifications'
         },
         (payload) => {
           const newNotif = payload.new;
+          
+          // FILTRE DE SÉCURITÉ EN JAVASCRIPT LOCAL (100% FIABLE SUR LES UUIDS)
+          if (newNotif.user_id !== user.id) return;
+
           const msg = newNotif.message || '';
 
-          // 1. DÉCLENCHER LE SON D'ALERTE SYSTEME (OBLIGATOIRE)
+          // 1. DÉCLENCHER LE SON D'ALERTE (SÉCURISÉ CONTRE LES ERREURS DE FICHIER MANQUANT)
           try {
             const audio = new Audio('/alert.mp3');
+            audio.addEventListener('error', (e) => {
+              console.warn("Fichier audio non trouvé ou impossible à charger :", e);
+            });
             audio.play().catch((err) => {
-              console.log("Lecture audio automatique bloquée :", err);
+              console.log("Lecture audio automatique bloquée ou indisponible :", err);
             });
           } catch (soundErr) {
             console.error("Échec de l'initialisation audio :", soundErr);
           }
 
-          // 2. PARSAGE DES MESSAGES DE TRANSFERT POUR EN FAIRE DES POP-UPS CENTRÉS
+          // 2. NETTOYER LE TEXTE (Minuscules et retrait des accents pour une détection parfaite)
+          const cleanMsg = msg
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, ""); // Ex: "adhésion" devient "adhesion"
 
-          // A. Réception de MANI
-          if (msg.includes("Vous avez reçu") && msg.includes("MANI")) {
+          // 3. PARSAGE DES MESSAGES DE TRANSFERT DE JETONS MANI OU TEMPS
+          if (cleanMsg.includes("vous avez recu") && cleanMsg.includes("mani")) {
             const match = msg.match(/Vous avez reçu (\d+) MANI de la part de @(.+)\./)
             if (match) {
               setActiveTransferModal({
@@ -165,8 +182,7 @@ function GlobalNotificationListener() {
               return;
             }
           }
-          // B. Envoi de MANI
-          if (msg.includes("Vous avez envoyé") && msg.includes("MANI")) {
+          if (cleanMsg.includes("vous avez envoye") && cleanMsg.includes("mani")) {
             const match = msg.match(/Vous avez envoyé (\d+) MANI au joueur @(.+)\./)
             if (match) {
               setActiveTransferModal({
@@ -177,22 +193,18 @@ function GlobalNotificationListener() {
               return;
             }
           }
-          // C. Réception de Temps (Minutes)
-          if (msg.includes("Vous avez reçu") && msg.includes("minutes de crédit temps")) {
-            const match = msg.match(/Vous avez reçu (\d+) minutes de crédit temps au joueur @(.+)\./) // Match fallback
-            const matchAlt = msg.match(/Vous avez reçu (\d+) minutes d'Evasion de la part de @(.+)\./)
-            const activeMatch = match || matchAlt
-            if (activeMatch) {
+          if (cleanMsg.includes("vous avez recu") && (cleanMsg.includes("credit temps") || cleanMsg.includes("evasion"))) {
+            const match = msg.match(/Vous avez reçu (\d+) minutes d'Evasion de la part de @(.+)\./)
+            if (match) {
               setActiveTransferModal({
-                amount: parseInt(activeMatch[1]),
-                partner: activeMatch[2],
+                amount: parseInt(match[1]),
+                partner: match[2],
                 type: 'time_receive'
               })
               return;
             }
           }
-          // D. Envoi de Temps (Minutes)
-          if (msg.includes("Vous avez envoyé") && msg.includes("minutes de crédit temps")) {
+          if (cleanMsg.includes("vous avez envoye") && cleanMsg.includes("credit temps")) {
             const match = msg.match(/Vous avez envoyé (\d+) minutes de crédit temps au joueur @(.+)\./)
             if (match) {
               setActiveTransferModal({
@@ -204,52 +216,100 @@ function GlobalNotificationListener() {
             }
           }
 
-          // AUTRES MESSAGES D'ALERTES (Gâteaux, Adhésions, Ragnarok)
-          if (newNotif.ragnarok_challenge_id) {
-            setActiveRagnarokInvite({ id: newNotif.ragnarok_challenge_id, message: msg });
-          } else if (msg.includes("Vous avez reçu") && msg.includes("minutes d'Evasion")) {
-            const extractedMins = parseInt(msg.replace(/[^0-9]/g, "")) || 120;
-            setActiveGiftModal({ minutes: extractedMins });
-          } else if (msg.includes("demande d'adhésion à la Team") && msg.includes("été validée par l'administration")) {
-            const extractedTeamId = msg.includes("Team FC 26") ? "FC 26" : msg.includes("Team Tekken") ? "Tekken" : msg.includes("Team GTA") ? "GTA" : msg.includes("Team Naruto") ? "Naruto" : msg.includes("Team Fortnite") ? "Fortnite" : "2K NBA";
-            setActiveCommunityResponseModal({ status: 'approved', teamId: extractedTeamId });
-          } else if (msg.includes("demande d'adhésion à la Team") && msg.includes("été rejetée par l'administration")) {
-            const extractedTeamId = msg.includes("Team FC 26") ? "FC 26" : msg.includes("Team Tekken") ? "Tekken" : msg.includes("Team GTA") ? "GTA" : msg.includes("Team Naruto") ? "Naruto" : msg.includes("Team Fortnite") ? "Fortnite" : "2K NBA";
-            setActiveCommunityResponseModal({ status: 'rejected', teamId: extractedTeamId });
-          } else {
-            // Toast flottant standard si aucun cas de pop-up n'est rencontré
-            toast.custom((t) => (
-              <div
-                onClick={() => {
-                  if (msg.includes("Alerte Adhésion") || msg.includes("demande à rejoindre la Team")) {
-                    navigate({ to: '/community' });
-                  }
-                  toast.dismiss(t.id);
-                }}
-                style={{
-                  background: '#040405',
-                  color: '#ffffff',
-                  border: '2px solid hsl(180, 100%, 50%)',
-                  borderRadius: '1rem',
-                  boxShadow: '0 0 15px hsl(180, 100%, 50%, 0.4)',
-                  cursor: (msg.includes("Alerte") || msg.includes("demande")) ? 'pointer' : 'default',
-                  fontSize: '11px',
-                  fontWeight: '900',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.15em',
-                  padding: '12px 24px'
-                }}
-              >
-                {msg}
-              </div>
-            ), {
-              position: "bottom-center",
-              duration: 8000
-            });
+          // 4. AUTRES MESSAGES D'ALERTES SPÉCIFIQUES
+      if (newNotif.ragnarok_challenge_id) {
+        setActiveRagnarokInvite({ id: newNotif.ragnarok_challenge_id, message: msg });
+        return;
+      } 
+      
+      if (cleanMsg.includes("vous avez recu") && cleanMsg.includes("minutes d'evasion")) {
+        const extractedMins = parseInt(msg.replace(/[^0-9]/g, "")) || 120;
+        setActiveGiftModal({ minutes: extractedMins });
+        return;
+      } 
+
+      // FILTRE DE DÉCISION : Les grands pop-ups ne s'ouvrent QUE s'il s'agit d'une décision et que ce n'est PAS l'admin
+      const isDecision = cleanMsg.includes("validee") || cleanMsg.includes("approuvee") || cleanMsg.includes("valide") || cleanMsg.includes("rejetee");
+      const isRequest = cleanMsg.includes("demande") || cleanMsg.includes("requete") || cleanMsg.includes("request");
+
+      if (isDecision && !isAdmin) { // MODIFIÉ ICI
+        if (cleanMsg.includes("demande d'adhesion a la team") || cleanMsg.includes("demande d'adhesion") || cleanMsg.includes("adhesion a la team")) {
+          const isApproved = cleanMsg.includes("validee") || cleanMsg.includes("approuvee") || cleanMsg.includes("valide");
+          const teamId = cleanMsg.includes("fc 26") ? "FC 26" : cleanMsg.includes("tekken") ? "Tekken" : cleanMsg.includes("gta") ? "GTA" : cleanMsg.includes("naruto") ? "Naruto" : cleanMsg.includes("fortnite") ? "Fortnite" : cleanMsg.includes("mortal kombat") ? "Mortal Kombat" : "2K NBA";
+          setActiveCommunityResponseModal({ status: isApproved ? 'approved' : 'rejected', teamId });
+          return;
+        } 
+        
+        if (cleanMsg.includes("cotisation pour la team") || cleanMsg.includes("renouvellement de cotisation")) {
+          const isApproved = cleanMsg.includes("validee") || cleanMsg.includes("approuvee") || cleanMsg.includes("valide");
+          const teamId = cleanMsg.includes("fc 26") ? "FC 26" : cleanMsg.includes("tekken") ? "Tekken" : cleanMsg.includes("gta") ? "GTA" : cleanMsg.includes("naruto") ? "Naruto" : cleanMsg.includes("fortnite") ? "Fortnite" : cleanMsg.includes("mortal kombat") ? "Mortal Kombat" : "2K NBA";
+          setActiveRenewalResponseModal({ status: isApproved ? 'approved' : 'rejected', teamId });
+          return;
+        }
+      } 
+          
+          else {
+            // Si c'est une simple demande, on n'affiche jamais de pop-up modale. On laisse le code s'exécuter
+            // pour l'afficher sous forme d'alerte classique de cloche (avec calcul des tarifs et explications de Rangs).
           }
+
+          // 5. SI AUCUN TRAITEMENT SPÉCIFIQUE : POP-UP UNIVERSEL DE CONFIRMATION (Uniquement pour le joueur)
+      if (!isRequest && !isAdmin) { // MODIFIÉ ICI
+        const isSuccess = cleanMsg.includes("felicitations") || cleanMsg.includes("validee") || cleanMsg.includes("approuvee") || cleanMsg.includes("valide") || cleanMsg.includes("succes") || cleanMsg.includes("recu") || cleanMsg.includes("consomme");
+        setActiveGenericModal({ message: msg, isSuccess });
+        return;
+      }
+
+          // 6. DÉTERMINATION DYNAMIQUE DE LA COULEUR NÉON DU TOAST FLOTTANT
+          let neonColor = 'hsl(180, 100%, 50%)'; // Par défaut : Cyan (MANI / Temps)
+          let shadowStyle = '0 0 15px rgba(6, 182, 212, 0.4)';
+
+          if (cleanMsg.includes("ragnarok") || cleanMsg.includes("defi") || cleanMsg.includes("duel") || cleanMsg.includes("combat")) {
+            neonColor = 'hsl(30, 100%, 50%)'; // Orange (PVP / Ragnarok)
+            shadowStyle = '0 0 15px rgba(249, 115, 22, 0.4)';
+          } else if (cleanMsg.includes("adhesion") || cleanMsg.includes("team") || cleanMsg.includes("communaut") || cleanMsg.includes("cotisation")) {
+            neonColor = 'hsl(270, 90%, 60%)'; // Violet (Teams / Cotisations)
+            shadowStyle = '0 0 15px rgba(168, 85, 247, 0.4)';
+          } else if (cleanMsg.includes("offert") || cleanMsg.includes("cadeau") || cleanMsg.includes("evasion") || cleanMsg.includes("compte cree") || cleanMsg.includes("privilege")) {
+            neonColor = 'hsl(45, 100%, 50%)'; // Jaune / Ambre (Fidélité / Cadeaux)
+            shadowStyle = '0 0 15px rgba(234, 179, 8, 0.4)';
+          }
+
+          // Toast flottant par défaut pour afficher les alertes reçues de façon stylisée
+          toast.custom((t) => (
+            <div
+              onClick={() => {
+                if (cleanMsg.includes("adhesion") || cleanMsg.includes("cotisation")) {
+                  navigate({ to: '/community' });
+                }
+                toast.dismiss(t.id);
+              }}
+              className="animate-slide-up text-left text-white"
+              style={{
+                background: '#040405',
+                color: '#ffffff',
+                border: `2px solid ${neonColor}`, // MODIFIÉ ICI (Couleur dynamique)
+                borderRadius: '1rem',
+                boxShadow: shadowStyle, // MODIFIÉ ICI (Ombre dynamique)
+                cursor: 'pointer',
+                fontSize: '11px',
+                fontWeight: '900',
+                textTransform: 'uppercase',
+                letterSpacing: '0.15em',
+                padding: '12px 24px'
+              }}
+            >
+              {msg}
+            </div>
+          ), {
+            position: "bottom-center",
+            duration: 8000
+          });
         }
       )
-      .subscribe()
+      .subscribe((status) => {
+        console.log("Statut d'écoute de notifications en direct :", status);
+      })
 
     return () => {
       supabase.removeChannel(channel);
@@ -290,10 +350,6 @@ function GlobalNotificationListener() {
             </p>
 
             <div className="bg-black/50 border border-white/5 rounded-3xl p-6 mb-8 text-center backdrop-blur-sm">
-              <p className="text-[9px] font-black uppercase text-white/40 tracking-widest block mb-2">Montant du transfert :</p>
-              <h4 className="text-4xl font-black uppercase text-secondary text-glow-cyan tracking-tighter" style={{ textShadow: '0 0 15px rgba(6,182,212,0.45)' }}>
-                {activeTransferModal.amount} {activeTransferModal.type.includes('mani') ? 'MANI' : 'Min'}
-              </h4>
               <p className="text-xs font-bold italic text-white/80 leading-relaxed mt-4">
                 {activeTransferModal.type === 'mani_receive' && `Félicitations ! Vous avez reçu ${activeTransferModal.amount} MANI de la part de @${activeTransferModal.partner}.`}
                 {activeTransferModal.type === 'time_receive' && `Félicitations ! Vous avez reçu ${activeTransferModal.amount} minutes de crédit temps de la part de @${activeTransferModal.partner}.`}
@@ -430,6 +486,98 @@ function GlobalNotificationListener() {
           </div>
         </div>
       )}
+
+      {/* 5. POP-UP COTISATION DE TEAM */}
+      {activeRenewalResponseModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
+          <div 
+            className="glass p-10 rounded-[3rem] border-2 max-w-md w-full relative overflow-hidden"
+            style={{ 
+              borderColor: activeRenewalResponseModal.status === 'approved' ? '#22c55e' : '#ef4444', 
+              boxShadow: `0 0 30px ${activeRenewalResponseModal.status === 'approved' ? '#22c55e' : '#ef4444'}30` 
+            }}
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 border border-white/10" style={{ backgroundColor: activeRenewalResponseModal.status === 'approved' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)' }}>
+              {activeRenewalResponseModal.status === 'approved' ? (
+                <CheckCircle2 className="text-green-500 animate-pulse" size={32} />
+              ) : (
+                <X className="text-red-500 animate-bounce" size={32} />
+              )}
+            </div>
+
+            <h3 
+              className="text-2xl font-black uppercase mb-2 tracking-tight"
+              style={{ color: activeRenewalResponseModal.status === 'approved' ? '#22c55e' : '#ef4444' }}
+            >
+              {activeRenewalResponseModal.status === 'approved' ? "COTISATION VALIDÉE !" : "COTISATION REJETÉE"}
+            </h3>
+            <p className="text-[10px] uppercase font-black tracking-widest text-white/40 mb-6">Team - {activeRenewalResponseModal.teamId}</p>
+
+            <div className="bg-black/50 border border-white/5 rounded-3xl p-6 mb-8 text-center backdrop-blur-sm">
+              <p className="text-xs font-bold italic leading-relaxed text-white/80">
+                {activeRenewalResponseModal.status === 'approved' 
+                  ? `Félicitations ! Votre renouvellement de cotisation pour la Team ${activeRenewalResponseModal.teamId} a été validé. Vos avantages exclusifs de membre d'équipe restent actifs !`
+                  : `Désolé, votre demande de renouvellement de cotisation pour la Team ${activeRenewalResponseModal.teamId} a été rejetée par l'administration (règlement non perçu).`
+                }
+              </p>
+            </div>
+
+            <NeonButton 
+              variant={activeRenewalResponseModal.status === 'approved' ? "violet" : "ghost"}
+              className="w-full py-4 text-xs font-black"
+              style={activeRenewalResponseModal.status === 'approved' ? { borderColor: 'rgba(34, 197, 94, 0.4)', color: '#22c55e' } : { borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}
+              onClick={() => setActiveRenewalResponseModal(null)}
+            >
+              Fermer
+            </NeonButton>
+          </div>
+        </div>
+      )}
+
+      {/* 6. POP-UP UNIVERSEL D'ACTION & SUCCÈS (AJOUTÉ) */}
+      {activeGenericModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
+          <div 
+            className="glass p-10 rounded-[3rem] border-2 max-w-md w-full relative overflow-hidden"
+            style={{ 
+              borderColor: activeGenericModal.isSuccess ? '#22c55e' : '#a855f7', 
+              boxShadow: `0 0 30px ${activeGenericModal.isSuccess ? '#22c55e' : '#a855f7'}30` 
+            }}
+          >
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 border border-white/10" style={{ backgroundColor: activeGenericModal.isSuccess ? 'rgba(34, 197, 94, 0.1)' : 'rgba(168, 85, 247, 0.1)' }}>
+              {activeGenericModal.isSuccess ? (
+                <CheckCircle2 className="text-green-500 animate-pulse" size={32} />
+              ) : (
+                <Bell className="text-primary animate-bounce" size={32} />
+              )}
+            </div>
+
+            <h3 
+              className="text-2xl font-black uppercase mb-2 tracking-tight"
+              style={{ color: activeGenericModal.isSuccess ? '#22c55e' : '#a855f7' }}
+            >
+              {activeGenericModal.isSuccess ? "ACTION RÉUSSIE !" : "NOTIFICATION"}
+            </h3>
+            <p className="text-[10px] uppercase font-black tracking-widest text-white/40 mb-6">Mise à jour du Sanctuary</p>
+
+            <div className="bg-black/50 border border-white/5 rounded-3xl p-6 mb-8 text-center backdrop-blur-sm">
+              <p className="text-xs font-bold italic leading-relaxed text-white/80">
+                {activeGenericModal.message}
+              </p>
+            </div>
+
+            <NeonButton 
+              variant={activeGenericModal.isSuccess ? "cyan" : "violet"}
+              className="w-full py-4 text-xs font-black"
+              onClick={() => setActiveGenericModal(null)}
+            >
+              Fermer
+            </NeonButton>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -439,6 +587,7 @@ const rootRoute = createRootRouteWithContext<MyRouterContext>()({
   component: () => {
     const { user, logout } = useAuth()
     const { data: metadata } = useUserMetadata()
+    const navigate = useNavigate() // AJOUTÉ ICI
 
     const isBanned = (metadata as any)?.is_banned === true;
 
@@ -455,7 +604,7 @@ const rootRoute = createRootRouteWithContext<MyRouterContext>()({
           <button 
             onClick={async () => {
               await logout();
-              window.location.href = '/login';
+              navigate({ to: '/login' }); // MODIFIÉ ICI
             }}
             className="px-8 py-4 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all"
           >
@@ -472,9 +621,10 @@ const rootRoute = createRootRouteWithContext<MyRouterContext>()({
           <Outlet />
         </main>
         <Footer />
-        <GlobalAdminNotifier /> {/* Écouteur d'alertes visuelles flottantes */}
-        <GlobalNotificationListener /> {/* Écouteur et sonnerie d'alertes sonores */}
-        <RankChangePopup /> {/* AJOUTÉ : Pop-up de transition de rang centré */}
+        <GlobalAdminNotifier />
+        <GlobalNotificationListener />
+        <RankChangePopup />
+        <HotToaster position="bottom-center" /> {/* AJOUTÉ ICI */}
       </div>
     )
   },

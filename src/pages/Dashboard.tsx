@@ -62,7 +62,7 @@ export function Dashboard() {
   const { data: loyalty, isLoading: loyaltyLoading } = useLoyalty()
   const { reservations, updateStatus, isLoading: resLoading } = useReservations()
   const { users: allUsers, stats: adminStats } = useAdminData()
-  const { claims, updateClaimStatus } = useClaims() // Données des achats
+  const { claims, updateClaimStatus, deleteClaim } = useClaims() // AJOUTÉ ICI (deleteClaim)
 
   const isAdmin = (metadata as any)?.is_admin
 
@@ -173,25 +173,28 @@ export function Dashboard() {
     refetchInterval: 10000 
   })
 
-  // AJOUTÉ : États locaux pour la gestion du formulaire dynamique de Cagnotte d'Équipe
-  const [showTeamForm, setShowTeamForm] = useState(false)
-  const [teamStation, setTeamStation] = useState('PS5_1')
-  const [teamPack, setTeamPack] = useState(TEAM_PACKS[2]) // Par défaut : Pack 4h (5000 F)
-  const [m1Id, setM1Id] = useState('')
-  const [m2Id, setM2Id] = useState('')
-  const [m3Id, setM3Id] = useState('')
-  
-  const [creatorCont, setCreatorCont] = useState(2500)
-  const [m1Cont, setM1Cont] = useState(2500)
-  const [m2Cont, setM2Cont] = useState(0)
-  const [m3Cont, setM3Cont] = useState(0)
+  // AJOUTÉ : États locaux pour la gestion du formulaire dynamique de Cagnotte d'Équipe (Augmenté à 4 coéquipiers)
+      const [showTeamForm, setShowTeamForm] = useState(false)
+      const [teamStation, setTeamStation] = useState('PS5_1')
+      const [teamPack, setTeamPack] = useState(TEAM_PACKS[2]) // Par défaut : Pack 4h (5000 F)
+      const [m1Id, setM1Id] = useState('')
+      const [m2Id, setM2Id] = useState('')
+      const [m3Id, setM3Id] = useState('')
+      const [m4Id, setM4Id] = useState('') // AJOUTÉ : Coéquipier 4
+      
+      const [creatorCont, setCreatorCont] = useState(2500)
+      const [m1Cont, setM1Cont] = useState(2500)
+      const [m2Cont, setM2Cont] = useState(0)
+      const [m3Cont, setM3Cont] = useState(0)
+      const [m4Cont, setM4Cont] = useState(0) // AJOUTÉ : Contribution Coéquipier 4
 
   // CALCUL AUTOMATIQUE DU TOTAL ET DES MINUTES PROPORTIONNELLES EN DIRECT
-  const activeContributions = creatorCont + (m1Id ? m1Cont : 0) + (m2Id ? m2Cont : 0) + (m3Id ? m3Cont : 0);
-  const creatorMin = Math.round((creatorCont / teamPack.price) * teamPack.minutes);
-  const m1Min = m1Id ? Math.round((m1Cont / teamPack.price) * teamPack.minutes) : 0;
-  const m2Min = m2Id ? Math.round((m2Cont / teamPack.price) * teamPack.minutes) : 0;
-  const m3Min = m3Id ? Math.round((m3Cont / teamPack.price) * teamPack.minutes) : 0;
+      const activeContributions = creatorCont + (m1Id ? m1Cont : 0) + (m2Id ? m2Cont : 0) + (m3Id ? m3Cont : 0) + (m4Id ? m4Cont : 0);
+      const creatorMin = Math.round((creatorCont / teamPack.price) * teamPack.minutes);
+      const m1Min = m1Id ? Math.round((m1Cont / teamPack.price) * teamPack.minutes) : 0;
+      const m2Min = m2Id ? Math.round((m2Cont / teamPack.price) * teamPack.minutes) : 0;
+      const m3Min = m3Id ? Math.round((m3Cont / teamPack.price) * teamPack.minutes) : 0;
+      const m4Min = m4Id ? Math.round((m4Cont / teamPack.price) * teamPack.minutes) : 0; // AJOUTÉ
 
   // AJOUTÉ : Système de vérification des sessions de favoris à venir (30 min avant)
   const queryClient = useQueryClient();
@@ -301,7 +304,7 @@ export function Dashboard() {
 
   const handleLogout = async () => {
     await logout();
-    window.location.href = '/login';
+    navigate({ to: '/login' }); // MODIFIÉ ICI
   };
 
   const maniProgress = Math.min((points / 100) * 100, 100)
@@ -348,7 +351,7 @@ export function Dashboard() {
       <div className="pt-40 pb-24 min-h-screen flex flex-col items-center justify-center text-center px-4 bg-background">
         <ShieldCheck size={64} className="text-muted-foreground mb-8 opacity-20" />
         <h2 className="text-3xl font-display uppercase tracking-widest mb-4 text-white">Espace Sécurisé</h2>
-        <NeonButton onClick={() => window.location.href = '/login'}>Aller à la connexion</NeonButton>
+        <NeonButton onClick={() => navigate({ to: '/login' })}>Aller à la connexion</NeonButton> {/* MODIFIÉ ICI */}
       </div>
     )
   }
@@ -438,12 +441,14 @@ export function Dashboard() {
                 </div>
               </div>
               <div className="shrink-0 flex justify-center">
-                <LiveCountdown 
-                  endTime={activeTeamSession.end_time} 
-                  isStarted={true} 
-                  className="shadow-neon-violet text-2xl px-6 py-2"
-                />
-              </div>
+            <LiveCountdown 
+              endTime={activeTeamSession.end_time} 
+              isStarted={true} 
+              className="shadow-neon-violet text-2xl px-6 py-2"
+              isPaused={(activeTeamSession as any).is_paused} // AJOUTÉ ICI
+              pausedRemainingSeconds={(activeTeamSession as any).paused_remaining_seconds} // AJOUTÉ ICI
+            />
+          </div>
             </div>
           </section>
         )}
@@ -858,11 +863,12 @@ export function Dashboard() {
                           }
 
                           const membersToSubmit = [
-                            { user_id: user.id, contribution_amount: creatorCont, allocated_minutes: creatorMin }
-                          ];
-                          if (m1Id) membersToSubmit.push({ user_id: m1Id, contribution_amount: m1Cont, allocated_minutes: m1Min });
-                          if (m2Id) membersToSubmit.push({ user_id: m2Id, contribution_amount: m2Cont, allocated_minutes: m2Min });
-                          if (m3Id) membersToSubmit.push({ user_id: m3Id, contribution_amount: m3Cont, allocated_minutes: m3Min });
+                        { user_id: user.id, contribution_amount: creatorCont, allocated_minutes: creatorMin }
+                      ];
+                      if (m1Id) membersToSubmit.push({ user_id: m1Id, contribution_amount: m1Cont, allocated_minutes: m1Min });
+                      if (m2Id) membersToSubmit.push({ user_id: m2Id, contribution_amount: m2Cont, allocated_minutes: m2Min });
+                      if (m3Id) membersToSubmit.push({ user_id: m3Id, contribution_amount: m3Cont, allocated_minutes: m3Min });
+                      if (m4Id) membersToSubmit.push({ user_id: m4Id, contribution_amount: m4Cont, allocated_minutes: m4Min }); // AJOUTÉ ICI
 
                           const now = new Date();
                           const endTime = new Date(now.getTime() + teamPack.minutes * 60000);
@@ -919,13 +925,14 @@ export function Dashboard() {
                             <select 
                               value={TEAM_PACKS.indexOf(teamPack)}
                               onChange={e => {
-                                const pack = TEAM_PACKS[parseInt(e.target.value)];
-                                setTeamPack(pack);
-                                setCreatorCont(pack.price / 2);
-                                setM1Cont(pack.price / 2);
-                                setM2Cont(0);
-                                setM3Cont(0);
-                              }}
+                            const pack = TEAM_PACKS[parseInt(e.target.value)];
+                            setTeamPack(pack);
+                            setCreatorCont(pack.price / 2);
+                            setM1Cont(pack.price / 2);
+                            setM2Cont(0);
+                            setM3Cont(0);
+                            setM4Cont(0); // AJOUTÉ
+                          }}
                               className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white"
                             >
                               {TEAM_PACKS.map((pk, idx) => (
@@ -936,55 +943,71 @@ export function Dashboard() {
                         </div>
 
                         {/* Choix des joueurs */}
-                        <div className="space-y-2 border-t border-white/5 pt-4">
-                          <p className="text-[9px] font-black uppercase text-white/40 tracking-wider">Sélectionner les coéquipiers (Max 3) :</p>
-                          
-                          {/* Coéquipier 1 */}
-                          <select 
-                            value={m1Id} 
-                            onChange={e => { setM1Id(e.target.value); if(!e.target.value) setM1Cont(0); }}
-                            className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none"
-                          >
-                            <option value="" className="bg-background">Sélectionner le Joueur 2...</option>
-                            {allAvailableGamers
-                              ?.filter((g: any) => g.user_id !== user.id && !g.is_admin && g.user_id !== m2Id && g.user_id !== m3Id)
-                              .map((g: any) => (
-                                <option key={g.user_id} value={g.user_id} className="bg-background" translate="no">{g.display_name}</option>
-                              ))}
-                          </select>
+                    <div className="space-y-2 border-t border-white/5 pt-4">
+                      <p className="text-[9px] font-black uppercase text-white/40 tracking-wider">Sélectionner les coéquipiers (Max 4) :</p>
+                      
+                      {/* Coéquipier 1 */}
+                      <select 
+                        value={m1Id} 
+                        onChange={e => { setM1Id(e.target.value); if(!e.target.value) setM1Cont(0); }}
+                        className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none"
+                      >
+                        <option value="" className="bg-background">Sélectionner le Joueur 2...</option>
+                        {allAvailableGamers
+                          ?.filter((g: any) => g.user_id !== user.id && !g.is_admin && g.user_id !== m2Id && g.user_id !== m3Id && g.user_id !== m4Id)
+                          .map((g: any) => (
+                            <option key={g.user_id} value={g.user_id} className="bg-background" translate="no">{g.display_name}</option>
+                          ))}
+                      </select>
 
-                          {/* Coéquipier 2 (Débloqué si 1 choisi) */}
-                          {m1Id && (
-                            <select 
-                              value={m2Id} 
-                              onChange={e => { setM2Id(e.target.value); if(!e.target.value) setM2Cont(0); }}
-                              className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none animate-fade-in"
-                            >
-                              <option value="" className="bg-background">Sélectionner le Joueur 3 (Optionnel)...</option>
-                              {allAvailableGamers
-                                ?.filter((g: any) => g.user_id !== user.id && !g.is_admin && g.user_id !== m1Id && g.user_id !== m3Id)
-                                .map((g: any) => (
-                                  <option key={g.user_id} value={g.user_id} className="bg-background" translate="no">{g.display_name}</option>
-                                ))}
-                            </select>
-                          )}
+                      {/* Coéquipier 2 (Débloqué si 1 choisi) */}
+                      {m1Id && (
+                        <select 
+                          value={m2Id} 
+                          onChange={e => { setM2Id(e.target.value); if(!e.target.value) setM2Cont(0); }}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none animate-fade-in"
+                        >
+                          <option value="" className="bg-background">Sélectionner le Joueur 3 (Optionnel)...</option>
+                          {allAvailableGamers
+                            ?.filter((g: any) => g.user_id !== user.id && !g.is_admin && g.user_id !== m1Id && g.user_id !== m3Id && g.user_id !== m4Id)
+                            .map((g: any) => (
+                              <option key={g.user_id} value={g.user_id} className="bg-background" translate="no">{g.display_name}</option>
+                            ))}
+                        </select>
+                      )}
 
-                          {/* Coéquipier 3 (Débloqué si 2 choisi) */}
-                          {m2Id && (
-                            <select 
-                              value={m3Id} 
-                              onChange={e => setM3Id(e.target.value)}
-                              className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none animate-fade-in"
-                            >
-                              <option value="" className="bg-background">Sélectionner le Joueur 4 (Optionnel)...</option>
-                              {allAvailableGamers
-                                ?.filter((g: any) => g.user_id !== user.id && !g.is_admin && g.user_id !== m1Id && g.user_id !== m2Id)
-                                .map((g: any) => (
-                                  <option key={g.user_id} value={g.user_id} className="bg-background" translate="no">{g.display_name}</option>
-                                ))}
-                            </select>
-                          )}
-                        </div>
+                      {/* Coéquipier 3 (Débloqué si 2 choisi) */}
+                      {m2Id && (
+                        <select 
+                          value={m3Id} 
+                          onChange={e => { setM3Id(e.target.value); if(!e.target.value) setM3Cont(0); }}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none animate-fade-in"
+                        >
+                          <option value="" className="bg-background">Sélectionner le Joueur 4 (Optionnel)...</option>
+                          {allAvailableGamers
+                            ?.filter((g: any) => g.user_id !== user.id && !g.is_admin && g.user_id !== m1Id && g.user_id !== m2Id && g.user_id !== m4Id)
+                            .map((g: any) => (
+                              <option key={g.user_id} value={g.user_id} className="bg-background" translate="no">{g.display_name}</option>
+                            ))}
+                        </select>
+                      )}
+
+                      {/* Coéquipier 4 (Débloqué si 3 choisi) - AJOUTÉ */}
+                      {m3Id && (
+                        <select 
+                          value={m4Id} 
+                          onChange={e => setM4Id(e.target.value)}
+                          className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none animate-fade-in"
+                        >
+                          <option value="" className="bg-background">Sélectionner le Joueur 5 (Optionnel)...</option>
+                          {allAvailableGamers
+                            ?.filter((g: any) => g.user_id !== user.id && !g.is_admin && g.user_id !== m1Id && g.user_id !== m2Id && g.user_id !== m3Id)
+                            .map((g: any) => (
+                              <option key={g.user_id} value={g.user_id} className="bg-background" translate="no">{g.display_name}</option>
+                            ))}
+                        </select>
+                      )}
+                    </div>
 
                         {/* Saisie des contributions financières */}
                         <div className="space-y-2 border-t border-white/5 pt-4">
@@ -1037,21 +1060,37 @@ export function Dashboard() {
                           )}
 
                           {/* Coéquipier 3 */}
-                          {m3Id && (
-                            <div className="flex items-center justify-between gap-4 p-2 bg-white/5 rounded-xl animate-fade-in">
-                              <span translate="no" className="text-xs font-bold text-primary">@{allAvailableGamers?.find((g: any) => g.user_id === m3Id)?.display_name}</span>
-                              <div className="text-right flex items-center gap-3">
-                                <input 
-                                  type="number" 
-                                  value={m3Cont} 
-                                  onChange={e => setM3Cont(parseInt(e.target.value) || 0)}
-                                  className="w-20 bg-background border border-white/10 rounded-lg p-1.5 text-xs text-white text-center focus:outline-none focus:border-primary"
-                                />
-                                <span className="text-[10px] text-secondary font-black">{m3Min} min</span>
-                              </div>
-                            </div>
-                          )}
+                      {m3Id && (
+                        <div className="flex items-center justify-between gap-4 p-2 bg-white/5 rounded-xl animate-fade-in">
+                          <span translate="no" className="text-xs font-bold text-primary">@{allAvailableGamers?.find((g: any) => g.user_id === m3Id)?.display_name}</span>
+                          <div className="text-right flex items-center gap-3">
+                            <input 
+                              type="number" 
+                              value={m3Cont} 
+                              onChange={e => setM3Cont(parseInt(e.target.value) || 0)}
+                              className="w-20 bg-background border border-white/10 rounded-lg p-1.5 text-xs text-white text-center focus:outline-none focus:border-primary"
+                            />
+                            <span className="text-[10px] text-secondary font-black">{m3Min} min</span>
+                          </div>
                         </div>
+                      )}
+
+                      {/* Coéquipier 4 - AJOUTÉ */}
+                      {m4Id && (
+                        <div className="flex items-center justify-between gap-4 p-2 bg-white/5 rounded-xl animate-fade-in">
+                          <span translate="no" className="text-xs font-bold text-primary">@{allAvailableGamers?.find((g: any) => g.user_id === m4Id)?.display_name}</span>
+                          <div className="text-right flex items-center gap-3">
+                            <input 
+                              type="number" 
+                              value={m4Cont} 
+                              onChange={e => setM4Cont(parseInt(e.target.value) || 0)}
+                              className="w-20 bg-background border border-white/10 rounded-lg p-1.5 text-xs text-white text-center focus:outline-none focus:border-primary"
+                            />
+                            <span className="text-[10px] text-secondary font-black">{m4Min} min</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                         {/* Résumé de Validation */}
                         <div className="border-t border-white/5 pt-4">
@@ -1244,15 +1283,15 @@ export function Dashboard() {
                           </div>
 
                           {/* 3. LE CHRONOMÈTRE (Prend automatiquement en compte la somme des deux temps) */}
-                          {!isAdmin && ts.status === 'en cours' && (
-                            <LiveCountdown 
-                              endTime={ts.end_time} 
-                              isStarted={true} 
-                              className="ml-2" 
-                              isPaused={ts.is_paused}
-                              pausedRemainingSeconds={ts.paused_remaining_seconds}
-                            />
-                          )}
+                {ts.status === 'en cours' && (
+                  <LiveCountdown 
+                    endTime={ts.end_time} 
+                    isStarted={true} 
+                    className="ml-2" 
+                    isPaused={ts.is_paused}
+                    pausedRemainingSeconds={ts.paused_remaining_seconds}
+                  />
+                )}
                         </div>
                           <div className="flex flex-wrap gap-2 mt-3">
                             {ts.team_session_members?.map((m: any) => (
@@ -1506,11 +1545,31 @@ export function Dashboard() {
                        </div>
                     </div>
                     <div className="flex items-center gap-4 text-right">
-                       <span className={cn("text-[9px] font-black uppercase px-4 py-2 rounded-full border", claim.status === 'livré' ? "bg-green-500/10 text-green-500 border-green-500/20" : "bg-secondary/10 text-secondary border-secondary/20 animate-pulse")}>{claim.status === 'livré' ? 'Livré' : 'En Attente'}</span>
-                       {isAdmin && claim.status === 'en attente' && (
-                         <button onClick={() => updateClaimStatus.mutate({ id: claim.id, status: 'livré' })} className="p-3 rounded-xl bg-secondary text-black hover:scale-110 transition-transform shadow-neon-cyan"><Check size={18} /></button>
-                       )}
-                    </div>
+                   <span className={cn("text-[9px] font-black uppercase px-4 py-2 rounded-full border", claim.status === 'livré' ? "bg-green-500/10 text-green-500 border-green-500/20" : "bg-secondary/10 text-secondary border-secondary/20 animate-pulse")}>{claim.status === 'livré' ? 'Livré' : 'En Attente'}</span>
+                   {isAdmin && claim.status === 'en attente' && (
+                     <button 
+                       onClick={() => updateClaimStatus.mutate({ id: claim.id, status: 'livré' })} 
+                       className="p-3 rounded-xl bg-secondary text-black hover:scale-110 hover:cursor-pointer transition-transform shadow-neon-cyan z-20 relative"
+                     >
+                       <Check size={18} className="pointer-events-none" />
+                     </button>
+                   )}
+                   
+                   {/* BOUTON SUPPRIMER D'HISTORIQUE (AJOUTÉ SI LIVRÉ) */}
+                   {claim.status === 'livré' && (
+                     <button 
+                       onClick={() => {
+                         if (confirm(`Voulez-vous supprimer définitivement l'article "${claim.rewards?.name}" de votre historique ?`)) {
+                           deleteClaim.mutate(claim.id);
+                         }
+                       }} 
+                       className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20 hover:scale-110 hover:cursor-pointer transition-all z-20 relative"
+                       title="Supprimer de l'historique"
+                     >
+                       <Trash2 size={14} className="pointer-events-none" />
+                     </button>
+                   )}
+                </div>
                   </div>
                 ))}
               </div>

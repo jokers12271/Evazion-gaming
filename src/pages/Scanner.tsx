@@ -102,7 +102,7 @@ export function Scanner() {
       // 5. REDIRECTION CARTE DE MEMBRE (ADMIN SEULEMENT)
       if (isAdmin) {
         toast.success("Carte de membre détectée. Redirection...");
-        window.location.href = `/dashboard/player/${scannedText}`;
+        navigate({ to: `/dashboard/player/${scannedText}` as any }); // MODIFIÉ ICI
       } else {
         toast.error("Code non reconnu ou réservé à l'administration.", { position: "bottom-center" });
         // Réactiver le flux de caméra après 2 secondes si le code est inconnu

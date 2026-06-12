@@ -89,12 +89,13 @@ export function usePrivileges() {
     }
   })
 
-  // 5. CORRIGÉ : Vérifier si le joueur a déjà eu son bonus de minutes précis (15 ou 30) cette semaine
-  const checkWeeklyBonusUsed = (bonusMinutes: number) => {
+  // 5. CORRIGÉ : Vérifier si le joueur a déjà eu son bonus de minutes précis cette semaine (avec support d'ID cible)
+  const checkWeeklyBonusUsed = (bonusMinutes: number, targetUserId?: string) => {
+    const finalUserId = targetUserId || user?.id; // Utilise le joueur ciblé s'il est fourni
     return useQuery({
-      queryKey: ['weekly_bonus_used', user?.id, bonusMinutes],
+      queryKey: ['weekly_bonus_used', finalUserId, bonusMinutes],
       queryFn: async () => {
-        if (!user || bonusMinutes <= 0) return false
+        if (!finalUserId || bonusMinutes <= 0) return false
 
         // Calcul du lundi de la semaine civile en cours
         const now = new Date()
@@ -107,15 +108,15 @@ export function usePrivileges() {
         const { data, error } = await supabase
           .from('reservations')
           .select('id')
-          .eq('user_id', user.id)
+          .eq('user_id', finalUserId)
           .neq('status', 'annulé')
-          .eq('bonus_minutes_applied', bonusMinutes) // Recherche ciblée sur la valeur du bonus
+          .eq('bonus_minutes_applied', bonusMinutes)
           .gte('start_time', monday.toISOString())
 
         if (error) throw error
-        return (data || []).length > 0 // Renvoie "true" si le bonus a déjà été consommé cette semaine
+        return (data || []).length > 0
       },
-      enabled: !!user && bonusMinutes > 0
+      enabled: !!finalUserId && bonusMinutes > 0
     })
   }
 

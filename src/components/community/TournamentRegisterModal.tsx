@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom' // AJOUTÉ ICI
 import { Tournament } from '@/hooks/useTournaments'
 import { NeonButton } from '@/components/ui/NeonButton'
 import { Trophy, X } from 'lucide-react'
@@ -18,26 +19,34 @@ export function TournamentRegisterModal({ tourney, onClose, onConfirm, isPending
   const isPaid = (tourney as any).is_paid;
   const baseFee = (tourney as any).fee_amount || 0;
 
-  // Calcul du tarif réduit automatisé selon le Rang
+  // Calcul du tarif réduit automatisé selon le Rang (Mis à jour selon les nouvelles règles)
   let finalFee = baseFee
   let discountLabel = ''
 
-  if (userRank.name === 'Pro' || userRank.name === 'Elite') {
-    finalFee = Math.round(baseFee * 0.75)
-    discountLabel = '🎟️ -25% de réduction Rang Pro/Elite appliquée'
-  } else if (userRank.name === 'Légende') {
-    finalFee = Math.round(baseFee * 0.50)
-    discountLabel = '🎟️ -50% de réduction Rang Légende appliquée'
-  } else if (userRank.name === 'Iconique' || userRank.name === 'Divin') {
+  if (isPaid) {
+    if (userRank.name === 'Pro') {
+      finalFee = Math.round(baseFee * 0.85) // -15%
+      discountLabel = '🎟️ -15% de réduction Rang Pro appliquée'
+    } else if (userRank.name === 'Elite' || userRank.name === 'Légende') {
+      finalFee = Math.round(baseFee * 0.75) // -25%
+      discountLabel = `🎟️ -25% de réduction Rang ${userRank.name} appliquée`
+    } else if (userRank.name === 'Iconique') {
+      finalFee = Math.round(baseFee * 0.50) // -50%
+      discountLabel = '🎟️ -50% de réduction Rang Iconique appliquée'
+    } else if (userRank.name === 'Divin') {
+      finalFee = 0 // GRATUIT
+      discountLabel = '🎟️ Inscription GRATUITE Rang Divin appliquée'
+    }
+  } else {
     finalFee = 0
-    discountLabel = '🎟️ Inscription GRATUITE Rang Iconique/Divin appliquée'
   }
 
   const isReallyPaid = isPaid && finalFee > 0;
   const phone = (tourney as any).payment_phone || '+242 05 795 72 48';
 
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
+  // UTILISATION DE CREATEPORTAL POUR INJECTER LA MODALE À LA RACINE DU CORPS HTML (PREMIER PLAN ABSOLU)
+  return createPortal(
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
       <div className="glass p-10 rounded-[2.5rem] border-2 border-primary shadow-neon-violet max-w-md w-full relative">
         <button onClick={onClose} className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none">
           <X size={20} />
@@ -90,6 +99,7 @@ export function TournamentRegisterModal({ tourney, onClose, onConfirm, isPending
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body // Injection directe à la racine
   )
 }

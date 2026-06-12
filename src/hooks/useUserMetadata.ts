@@ -38,8 +38,9 @@ export function useUserMetadata() {
       if (data) return data as UserMetadata
 
       // 3. Si l'utilisateur n'existe pas (nouveau compte), on le crée instantanément
-      // On utilise le début de son email comme nom par défaut
-      const defaultName = user.email ? user.email.split('@')[0] : 'Gamer'
+      // On utilise en priorité le pseudo et l'avatar saisis lors de l'inscription
+      const defaultName = user.user_metadata?.display_name || (user.email ? user.email.split('@')[0] : 'Gamer')
+      const defaultAvatar = user.user_metadata?.avatar_url || ''
       
       const { data: inserted, error: insError } = await supabase
         .from('users_metadata')
@@ -47,7 +48,7 @@ export function useUserMetadata() {
           user_id: user.id,
           display_name: defaultName,
           membership_type: 'standard',
-          avatar_url: '',
+          avatar_url: defaultAvatar, // MODIFIÉ ICI
           is_admin: false
         })
         .select()

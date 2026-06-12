@@ -42,7 +42,7 @@ export function ProfileSettings({ metadata, onClose }: Props) {
     return null; // Mot de passe conforme !
   }
 
-  // GESTION DU TÉLÉCHARGEMENT DIRECT DE PHOTO EN BASE (AJOUTÉ)
+  // GESTION DU TÉLÉCHARGEMENT DIRECT DE PHOTO EN BASE (SÉCURISÉE)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -54,12 +54,12 @@ export function ProfileSettings({ metadata, onClose }: Props) {
     setIsUploading(true)
     try {
       const fileExt = file.name.split('.').pop()
-      const fileName = `${Math.random()}.${fileExt}`
-      const filePath = `${fileName}`
+      // Utiliser l'ID de l'utilisateur pour écraser proprement sa propre photo s'il la change
+      const filePath = `${user?.id || Math.random()}.${fileExt}`
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file)
+        .upload(filePath, file, { upsert: true }) // AJOUTÉ : Remplacement autorisé (upsert)
 
       if (uploadError) throw uploadError
 
@@ -70,8 +70,8 @@ export function ProfileSettings({ metadata, onClose }: Props) {
       setAvatarUrl(data.publicUrl)
       toast.success("Image importée avec succès !", { position: "top-center" })
     } catch (err: any) {
-      console.error(err)
-      toast.error("Échec de l'importation de l'image.")
+      console.error("Erreur de téléversement :", err)
+      toast.error(err.message || "Échec de l'importation de l'image.", { position: "top-center" }) // MODIFIÉ (Explicite)
     } finally {
       setIsUploading(false)
     }

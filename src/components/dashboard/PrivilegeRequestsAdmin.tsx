@@ -9,8 +9,9 @@ export function PrivilegeRequestsAdmin() {
     try {
       await approveClaim.mutateAsync({ claimId, userId, privilegeTitle: key })
       toast.success("Privilège distribué et validé à vie !")
-    } catch (e) {
-      toast.error("Erreur d'approbation")
+    } catch (e: any) {
+      console.error("Erreur de validation de privilège physique :", e)
+      toast.error(e.message || "Erreur d'approbation")
     }
   }
 

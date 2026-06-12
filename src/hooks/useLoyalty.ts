@@ -18,6 +18,14 @@ export function useLoyalty() {
     queryFn: async () => {
       if (!user) return null
 
+      // 1. Déclencher silencieusement le versement mensuel automatique d'heures (Iconique/Divin)
+      try {
+        await supabase.rpc('credit_monthly_loyalty_hours')
+      } catch (rpcErr) {
+        console.warn("Échec silencieux du crédit mensuel automatique :", rpcErr)
+      }
+
+      // 2. Charger les points de fidélité depuis la base de données
       const { data, error } = await supabase
         .from('loyalty_points')
         .select('*')
@@ -26,16 +34,19 @@ export function useLoyalty() {
 
       if (error) throw error
       
-      // Si l'utilisateur n'a pas encore de ligne, on lui en crée une PROPRE à 0
+      // 3. Si l'utilisateur n'a pas encore de ligne, on lui en crée une PROPRE à 0
+      // Utilisation du pseudo transmis lors de l'inscription pour éviter les conflits RLS
       if (!data) {
+        const defaultName = user.user_metadata?.display_name || (user.email ? user.email.split('@')[0] : 'Gamer')
         const { data: newData, error: err } = await supabase
           .from('loyalty_points')
           .insert({ 
             user_id: user.id,
+            display_name: defaultName,
             points: 0,
             total_hours: 0,
             total_minutes: 0,
-            time_credit_minutes: 0 // <--- On force le 0 ici
+            time_credit_minutes: 0
           })
           .select()
           .single()

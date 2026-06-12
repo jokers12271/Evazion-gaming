@@ -38,11 +38,14 @@ export function useAuth() {
     }
   }
 
-  // 2. Déclenchement de l'inscription (Envoie l'e-mail de validation OTP de Supabase)
-  const signUp = async (email: string, pass: string) => {
+  // 2. Déclenchement de l'inscription avec transmission des métadonnées (display_name, etc.)
+  const signUp = async (email: string, pass: string, metadata?: Record<string, any>) => {
     const { data, error } = await supabase.auth.signUp({ 
       email, 
-      password: pass 
+      password: pass,
+      options: {
+        data: metadata
+      }
     })
     if (error) throw error
     return data
