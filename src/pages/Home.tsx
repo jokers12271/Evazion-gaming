@@ -181,7 +181,7 @@ export function Home() {
                        "w-1.5 h-1.5 rounded-full animate-ping",
                        currentStatus === 'ouvert' ? "bg-green-500" : "bg-red-500"
                      )} />
-                     <span>SANCTUAIRE : {(currentStatus || 'ouvert').toUpperCase()}</span> -- SÉCURISÉ
+                     <span>SANCTUAIRE : {(currentStatus || 'ouvert').toUpperCase()}</span>
                    </span>
                  </div>
                )}
