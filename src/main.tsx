@@ -8,13 +8,14 @@ import './index.css'
 
 const queryClient = new QueryClient()
 
-// ENREGISTREMENT DU SERVICE WORKER PWA (AJOUTÉ)
+// DÉSACTIVATION ET SUPPRESSION DU SERVICE WORKER OBSOLÈTE (CORRIGÉ !)
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then((reg) => console.log('PWA : Service Worker enregistré !', reg.scope))
-      .catch((err) => console.error('PWA : Échec Service Worker :', err));
-  });
+  navigator.serviceWorker.getRegistrations().then((registrations) => {
+    for (let registration of registrations) {
+      registration.unregister()
+        .then(() => console.log('PWA : Service Worker obsolète désenregistré avec succès !'))
+    }
+  })
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
