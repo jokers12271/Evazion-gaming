@@ -34,9 +34,21 @@ export function Scanner() {
       .replace(/[\u0300-\u036f]/g, "") // Supprime les accents (é -> E)
       .replace(/[\s-]/g, "_");         // Remplace les espaces et tirets par des tirets du bas _
 
-    // 4. ROUTAGE DYNAMIQUE ROBUSTE (Tolère Evazion, Evasion et Evacuation)
-    const isEntryCode = cleanText === 'EVAZION_ENTREE' || cleanText === 'EVASION_ENTREE' || cleanText === 'EVACUATION_ENTREE';
-    const isExitCode = cleanText === 'EVAZION_SORTIE' || cleanText === 'EVASION_SORTIE' || cleanText === 'EVACUATION_SORTIE';
+    // 4. ROUTAGE DYNAMIQUE ROBUSTE (Prend en compte les textes et vos liens raccourcis de salle)
+    const isEntryCode = 
+      cleanText === 'EVAZION_ENTREE' || 
+      cleanText === 'EVASION_ENTREE' || 
+      cleanText === 'EVACUATION_ENTREE' ||
+      scannedText.includes('n2sjq4wt') || // AJOUTÉ : Support direct de votre lien de test d'entrée me-qr.com
+      scannedText.toLowerCase().includes('entree') || 
+      scannedText.toLowerCase().includes('entry');
+
+    const isExitCode = 
+      cleanText === 'EVAZION_SORTIE' || 
+      cleanText === 'EVASION_SORTIE' || 
+      cleanText === 'EVACUATION_SORTIE' ||
+      scannedText.toLowerCase().includes('sortie') || 
+      scannedText.toLowerCase().includes('exit');
 
     if (isEntryCode) {
       if (!user) {
