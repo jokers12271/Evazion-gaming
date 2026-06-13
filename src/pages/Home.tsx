@@ -139,7 +139,7 @@ export function Home() {
                    <span className="text-[8px] font-black uppercase text-white/40 tracking-[0.2em]">Interrupteur Sanctuary (Admin) :</span>
                    <button 
                      onClick={async () => {
-                       const nextStatus = currentStatus === 'ouvert' ? 'fermé' : 'ouvert';
+                   const nextStatus = (currentStatus || 'ouvert') === 'ouvert' ? 'fermé' : 'ouvert'; // SÉCURISÉ
                        try {
                          await toggleStatus.mutateAsync(nextStatus);
                          const audio = new Audio('/alert.mp3');
@@ -150,11 +150,11 @@ export function Home() {
                        }
                      }}
                      className={cn(
-                       "w-16 h-7 rounded-full border p-1 transition-all duration-300 relative flex items-center shadow-lg",
-                       currentStatus === 'ouvert' 
-                         ? "border-green-500 bg-green-500/10 shadow-[0_0_15px_rgba(34,197,94,0.2)] justify-start" 
-                         : "border-red-500 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.2)] justify-end"
-                     )}
+                   "w-16 h-7 rounded-full border p-1 transition-all duration-300 relative flex items-center shadow-lg",
+                   (currentStatus || 'ouvert') === 'ouvert' // SÉCURISÉ
+                     ? "border-green-500 bg-green-500/10 shadow-[0_0_15px_rgba(34,197,94,0.2)] justify-start" 
+                     : "border-red-500 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.2)] justify-end"
+                 )}
                    >
                      <div 
                        className={cn(
@@ -171,17 +171,17 @@ export function Home() {
                  <div className="animate-fade-in">
                    <span 
                      className={cn(
-                       "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.25em] border inline-flex items-center gap-2 shadow-lg",
-                       currentStatus === 'ouvert'
-                         ? "border-green-500/30 bg-green-500/5 text-green-500 shadow-[0_0_15px_rgba(34,197,94,0.15)]"
-                         : "border-red-500/30 bg-red-500/5 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.15)]"
-                     )}
+                   "px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.25em] border inline-flex items-center gap-2 shadow-lg",
+                   (currentStatus || 'ouvert') === 'ouvert' // SÉCURISÉ
+                     ? "border-green-500/30 bg-green-500/5 text-green-500 shadow-[0_0_15px_rgba(34,197,94,0.15)]"
+                     : "border-red-500/30 bg-red-500/5 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.15)]"
+                 )}
                    >
                      <span className={cn(
                        "w-1.5 h-1.5 rounded-full animate-ping",
                        currentStatus === 'ouvert' ? "bg-green-500" : "bg-red-500"
                      )} />
-                     <span>SANCTUAIRE : {currentStatus.toUpperCase()}</span>
+                     <span>SANCTUAIRE : {(currentStatus || 'ouvert').toUpperCase()}</span> -- SÉCURISÉ
                    </span>
                  </div>
                )}
