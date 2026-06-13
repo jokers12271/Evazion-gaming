@@ -587,7 +587,6 @@ const rootRoute = createRootRouteWithContext<MyRouterContext>()({
   component: () => {
     const { user, logout } = useAuth()
     const { data: metadata } = useUserMetadata()
-    const navigate = useNavigate() // AJOUTÉ ICI
 
     const isBanned = (metadata as any)?.is_banned === true;
 
@@ -604,7 +603,7 @@ const rootRoute = createRootRouteWithContext<MyRouterContext>()({
           <button 
             onClick={async () => {
               await logout();
-              navigate({ to: '/login' }); // MODIFIÉ ICI
+              window.location.href = '/login'; // MODIFIÉ : Utilisation de window.location pour un nettoyage de session parfait
             }}
             className="px-8 py-4 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-105 transition-all"
           >
