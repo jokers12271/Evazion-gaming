@@ -65,7 +65,7 @@ export function Community() {
   const pendingTeams = myRequests?.filter(r => r.status === 'pending') || []
   const totalTeamsCount = approvedTeams.length;
 
-  // MODIFIÉ : Chargement en direct des membres approuvés directement depuis la table de liaison (Pour le support Multi-teams)
+  // MODIFIÉ : Chargement en direct des membres approuvés (Exclut tous les comptes administrateurs)
   const { data: allMembers } = useQuery({
     queryKey: ['all_team_members_list'],
     queryFn: async () => {
@@ -75,12 +75,17 @@ export function Community() {
           user_id,
           team_id,
           status,
-          users_metadata ( display_name, avatar_url )
+          users_metadata ( display_name, avatar_url, is_admin ) -- Sélection de la colonne is_admin
         `)
         .eq('status', 'approved'); // Uniquement les membres validés payés
 
       if (error) throw error;
-      return data || [];
+      
+      // FILTRAGE STRICT : Exclure tout membre ayant le statut administrateur
+      return (data || []).filter((m: any) => {
+        const profile = Array.isArray(m.users_metadata) ? m.users_metadata[0] : m.users_metadata;
+        return profile?.is_admin !== true;
+      });
     }
   });
 

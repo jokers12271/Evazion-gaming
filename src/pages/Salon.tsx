@@ -21,7 +21,7 @@ export function Salon() {
   const isAdmin = metadata?.is_admin || false
   const queryClient = useQueryClient()
 
-  // 1. Charger la liste des joueurs présents physiquement en salle
+  // 1. Charger la liste des joueurs présents physiquement en salle (Exclut les admins et les tests)
   const { data: presentUsers, isLoading } = useQuery({
     queryKey: ['present_users'],
     queryFn: async () => {
@@ -32,9 +32,12 @@ export function Salon() {
         .order('last_scanned_at', { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      
+      // FILTRAGE STRICT : Exclure le compte 'test' et tout administrateur
+      const list = data || [];
+      return list.filter((u: any) => u.display_name?.toLowerCase() !== 'test' && u.is_admin !== true);
     },
-    refetchInterval: 10000 // Rafraîchissement automatique toutes les 10 secondes
+    refetchInterval: 10000
   });
 
   // Détecter si le joueur connecté fait partie des personnes présentes

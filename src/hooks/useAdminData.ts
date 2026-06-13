@@ -16,9 +16,9 @@ export function useAdminData() {
         throw error;
       }
       
-      // On filtre "test" et on s'assure de ne pas retourner "null"
+      // FILTRAGE STRICT : On exclut le compte 'test' ET tous les administrateurs connectés
       const list = data || [];
-      return list.filter(u => u.display_name?.toLowerCase() !== 'test');
+      return list.filter(u => u.display_name?.toLowerCase() !== 'test' && u.is_admin !== true);
     }
   });
 

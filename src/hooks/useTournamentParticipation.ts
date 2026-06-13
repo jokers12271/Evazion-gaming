@@ -18,18 +18,23 @@ export function useTournamentParticipation(tournamentId: string) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
-  // 1. Lire uniquement les compétiteurs validés (approved) sur la carte publique
+  // 1. Lire uniquement les compétiteurs validés (approved) sur la carte publique (Exclut les admins)
   const query = useQuery({
     queryKey: ['participants', tournamentId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tournament_participants')
-        .select('user_id, display_name')
+        .select('user_id, display_name, users_metadata:user_id(is_admin)') // JOINTURE DE SÉCURITÉ ADMIN
         .eq('tournament_id', tournamentId)
-        .eq('status', 'approved'); // MODIFIÉ : Filtrage strict
+        .eq('status', 'approved');
 
       if (error) throw error;
-      return data || [];
+      
+      // FILTRAGE STRICT : Exclure tout joueur ayant le statut administrateur
+      return (data || []).filter((p: any) => {
+        const meta = Array.isArray(p.users_metadata) ? p.users_metadata[0] : p.users_metadata;
+        return meta?.is_admin !== true;
+      });
     }
   });
 
