@@ -1,36 +1,73 @@
-import { useLiveTimer } from '@/hooks/useLiveTimer'
-import { Timer, Pause } from 'lucide-react' // MODIFIÉ : Ajout de l'icône de Pause
-import { cn } from '@blinkdotnew/ui'
+import React, { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
+import { Clock, Pause } from 'lucide-react';
 
-interface LiveCountdownProps {
-  endTime: string
-  isStarted: boolean
-  className?: string
-  isPaused?: boolean // AJOUTÉ
-  pausedRemainingSeconds?: number // AJOUTÉ
-}
+export function LiveCountdown({
+  endTime,
+  isStarted = true,
+  isPaused = false,
+  pausedRemainingSeconds = 0,
+  className
+}: {
+  endTime: string;
+  isStarted?: boolean;
+  isPaused?: boolean;
+  pausedRemainingSeconds?: number;
+  className?: string;
+}) {
+  const [remaining, setRemaining] = useState<number>(() => {
+    if (isPaused && pausedRemainingSeconds > 0) return pausedRemainingSeconds;
+    const end = new Date(endTime).getTime();
+    const now = Date.now();
+    return Math.max(0, Math.floor((end - now) / 1000));
+  });
 
-export function LiveCountdown({ endTime, isStarted, className, isPaused, pausedRemainingSeconds }: LiveCountdownProps) {
-  const { display, isOver } = useLiveTimer(endTime, isStarted)
+  useEffect(() => {
+    if (isPaused) {
+      if (pausedRemainingSeconds > 0) setRemaining(pausedRemainingSeconds);
+      return;
+    }
 
-  if (!isStarted) return null;
+    const interval = setInterval(() => {
+      const end = new Date(endTime).getTime();
+      const now = Date.now();
+      const diff = Math.max(0, Math.floor((end - now) / 1000));
+      setRemaining(diff);
+      if (diff <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
 
-  // Calcul du format d'affichage statique si la session est en pause
-  let displayValue = display;
-  if (isPaused && pausedRemainingSeconds !== undefined && pausedRemainingSeconds !== null) {
-    const mins = Math.floor(pausedRemainingSeconds / 60);
-    const secs = pausedRemainingSeconds % 60;
-    displayValue = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  }
+    return () => clearInterval(interval);
+  }, [endTime, isPaused, pausedRemainingSeconds]);
+
+  const hours = Math.floor(remaining / 3600);
+  const minutes = Math.floor((remaining % 3600) / 60);
+  const seconds = remaining % 60;
+
+  const formatted = [
+    hours > 0 ? String(hours).padStart(2, '0') : null,
+    String(minutes).padStart(2, '0'),
+    String(seconds).padStart(2, '0')
+  ]
+    .filter(Boolean)
+    .join(':');
 
   return (
-    <div className={cn(
-      "flex items-center gap-2 px-3 py-1 rounded-lg font-black font-display text-lg shadow-lg animate-fade-in",
-      isOver ? "bg-red-500 text-white animate-pulse" : (isPaused ? "bg-yellow-500 text-black shadow-yellow-500/20" : "bg-primary text-black"), // Couleur jaune en pause
-      className
-    )}>
-      {isPaused ? <Pause size={18} className="animate-pulse" /> : <Timer size={18} className={isOver ? "animate-spin" : ""} />}
-      <span>{isPaused ? `PAUSÉ : ${displayValue}` : (isOver ? "TEMPS ÉCOULÉ" : displayValue)}</span>
+    <div
+      className={cn(
+        'inline-flex items-center gap-2 px-3 py-1.5 rounded-xl font-mono font-black text-sm',
+        isPaused
+          ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'
+          : remaining < 300
+          ? 'bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse'
+          : 'bg-secondary/20 text-secondary border border-secondary/40 shadow-neon-cyan',
+        className
+      )}
+    >
+      {isPaused ? <Pause size={14} /> : <Clock size={14} className="animate-spin" style={{ animationDuration: '4s' }} />}
+      <span>{formatted}</span>
+      {isPaused && <span className="text-[8px] uppercase tracking-wider">PAUSE</span>}
     </div>
-  )
+  );
 }

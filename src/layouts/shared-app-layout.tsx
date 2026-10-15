@@ -3,8 +3,11 @@
  * Do not wrap individual pages in Shell or duplicate sidebars/top bars.
  */
 import React, { createContext, useContext } from 'react'
-import { Shell } from '../Shell'
 import { AppSidebarShell } from '../components/AppSidebarShell'
+
+function Shell({ children, className }: { appName?: string; sidebar?: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return <div className={className}>{children}</div>
+}
 
 export type SharedLayoutContextValue = {
   appName: string

@@ -92,16 +92,16 @@ export function Footer() {
           {/* 4. Colonne Horaires */}
           <div className="flex flex-col items-center md:items-start w-full">
             <h4 className="font-display uppercase tracking-widest text-[9px] md:text-xs font-black text-white mb-6">Horaires</h4>
-            <ul className="space-y-3 text-xs font-bold uppercase tracking-widest text-muted-foreground w-full max-w-[240px] md:max-w-none">
-              <li className="flex justify-between border-b border-white/5 pb-2">
+            <ul className="space-y-3 text-xs font-bold uppercase tracking-widest text-muted-foreground w-full max-w-[260px] md:max-w-none">
+              <li className="flex justify-between items-center w-full border-b border-white/5 pb-2 gap-4">
                 <span>Lun - Ven</span>
                 <span className="text-white">10:00 - 21:00</span>
               </li>
-              <li className="flex justify-between border-b border-primary/30 pb-2 text-primary font-black shadow-neon-violet">
+              <li className="flex justify-between items-center w-full border-b border-primary/30 pb-2 text-primary font-black shadow-neon-violet gap-4">
                 <span>Samedi</span>
                 <span>10:00 - 23:00</span>
               </li>
-              <li className="flex justify-between pb-2">
+              <li className="flex justify-between items-center w-full pb-2 gap-4">
                 <span>Dimanche</span>
                 <span className="text-white">09:00 - 21:00</span>
               </li>

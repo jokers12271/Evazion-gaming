@@ -27,6 +27,12 @@ module.exports = {
         lg:      'var(--shadow-lg)',
         xl:      'var(--shadow-xl)',
         card:    'var(--shadow-card)',
+        'neon-violet': '0 0 25px -4px hsla(270, 95%, 65%, 0.4), 0 0 10px -2px hsla(270, 95%, 65%, 0.25)',
+        'neon-cyan': '0 0 25px -4px hsla(185, 100%, 50%, 0.4), 0 0 10px -2px hsla(185, 100%, 50%, 0.25)',
+        'neon-orange': '0 0 25px -4px hsla(25, 100%, 55%, 0.4), 0 0 10px -2px hsla(25, 100%, 55%, 0.25)',
+        'neon-emerald': '0 0 25px -4px hsla(142, 80%, 48%, 0.4), 0 0 10px -2px hsla(142, 80%, 48%, 0.25)',
+        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.45)',
+        'glass-hover': '0 12px 40px 0 rgba(0, 0, 0, 0.65)',
       },
 
       // ── Font families — resolve to per-theme CSS vars ─────────────────────
@@ -121,11 +127,26 @@ module.exports = {
         'accordion-down':'accordion-down 0.2s ease-out',
         'accordion-up':  'accordion-up 0.2s ease-out',
         'glow':          'glow 2s ease-in-out infinite alternate',
+        'pulse-glow':    'pulse-glow 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'shimmer':       'shimmer 2.5s infinite',
+        'float':         'float 4s ease-in-out infinite',
       },
       keyframes: {
         'glow': {
           '0%': { boxShadow: '0 0 5px hsla(var(--primary), 0.2)' },
           '100%': { boxShadow: '0 0 20px hsla(var(--primary), 0.6)' },
+        },
+        'pulse-glow': {
+          '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+          '50%': { opacity: '0.85', transform: 'scale(1.02)' },
+        },
+        'shimmer': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(200%)' },
+        },
+        'float': {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-6px)' },
         },
         'fade-in': {
           '0%':   { opacity: '0' },

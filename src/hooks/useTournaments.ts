@@ -9,9 +9,14 @@ export interface Tournament {
   description: string
   status: string
   image_url: string
-  is_paid?: boolean       // AJOUTÉ (Déclaré pour la base de données)
-  fee_amount?: number     // AJOUTÉ (Déclaré pour la base de données)
-  payment_phone?: string   // AJOUTÉ (Déclaré pour la base de données)
+  is_paid?: boolean        // AJOUTÉ (Déclaré pour la base de données)
+  fee_amount?: number      // AJOUTÉ (Déclaré pour la base de données)
+  payment_phone?: string    // AJOUTÉ (Déclaré pour la base de données)
+  max_places?: number       // Nombre de places (2 a 20)
+  cashprize_fcfa?: number   // Cashprize en FCFA
+  system?: 'coupe' | 'championnat'      // Systeme de competition
+  format?: 'elimination' | 'aller_retour' // Format d'elimination
+  is_spotlight?: boolean    // Evenement phare (un seul a la fois)
 }
 
 export function useTournaments() {
@@ -32,6 +37,10 @@ export function useTournaments() {
 
   const addTournament = useMutation({
     mutationFn: async (newTourney: Omit<Tournament, 'id'>) => {
+      // Un seul evenement phare a la fois : on retire le drapeau des autres.
+      if ((newTourney as Tournament).is_spotlight) {
+        await supabase.from('tournaments').update({ is_spotlight: false }).eq('is_spotlight', true);
+      }
       const { error } = await supabase.from('tournaments').insert([newTourney]);
       if (error) throw error;
     },
@@ -40,6 +49,14 @@ export function useTournaments() {
 
   const updateTournament = useMutation({
     mutationFn: async (updatedTourney: Tournament) => {
+      // Un seul evenement phare a la fois : on retire le drapeau des autres.
+      if (updatedTourney.is_spotlight) {
+        await supabase
+          .from('tournaments')
+          .update({ is_spotlight: false })
+          .eq('is_spotlight', true)
+          .neq('id', updatedTourney.id);
+      }
       const { error } = await supabase
         .from('tournaments')
         .update(updatedTourney)

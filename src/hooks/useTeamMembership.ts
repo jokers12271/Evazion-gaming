@@ -9,6 +9,8 @@ export interface TeamConfig {
   monthly_fee: number
   payment_phone: string
   updated_at: string
+  status?: string | null
+  perks?: string | null
 }
 
 export interface MembershipRequest {

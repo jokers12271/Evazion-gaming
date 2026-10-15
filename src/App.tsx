@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react' // AJOUTÉ
+﻿import { useState, useEffect, useLayoutEffect } from 'react' // AJOUTÉ
 import { 
   createRouter, 
   createRoute, 
@@ -24,14 +24,33 @@ import { PlayerDetail } from './pages/PlayerDetail' // Importé
 import { Scanner } from './pages/Scanner'         // AJOUTÉ
 import { Salon } from './pages/Salon'             // AJOUTÉ (Salon importé)
 import { RankChangePopup } from './components/dashboard/RankChangePopup' // AJOUTÉ : Pop-up de rang
+import { BracketAssignmentModal } from './components/tournaments/BracketAssignmentModal' // AJOUTÉ : Fenetre post-tirage d'arbre
 import { supabase } from './lib/supabase'          // REMPLACÉ (Import réel)
 import { NeonButton } from './components/ui/NeonButton' // AJOUTÉ
-import { useNavigate } from '@tanstack/react-router' // AJOUTÉ
+import { ManiIcon } from './components/ui/ManiIcon'
+import { useNavigate, useLocation } from '@tanstack/react-router' // AJOUTÉ
+import gsap from 'gsap'
 import { useTeamSessions, useActiveTeamSession, useUpdateTeamSessionStatus, useDeleteTeamSession, usePauseTeamSession, useResumeTeamSession } from './hooks/useTeamSessions'
 import { useRagnarok } from './hooks/useRagnarok' // AJOUTÉ : Import du hook de défis
 import { ResetPassword } from './pages/ResetPassword'
 import { Bell, X, CheckCircle2, Swords, Gift, Coins, Clock } from 'lucide-react'
 import { Toaster as HotToaster } from 'react-hot-toast' // AJOUTÉ ICI
+import { GamificationHubWidget } from './components/gamification/GamificationHubWidget' // AJOUTÉ : Hub de gamification (Atelier)
+import { useCommunityStore } from './lib/communityData' // AJOUTÉ : Hydratation Supabase de la communauté
+import { useTournamentStore } from './lib/tournamentData' // AJOUTÉ : Hydratation Supabase des tournois
+
+
+// AJOUTÉ : Force l'hydratation Supabase du store communautaire au niveau racine
+function CommunityStoreHydrator() {
+  useCommunityStore()
+  return null
+}
+
+// AJOUTÉ : Force l'hydratation Supabase du store tournoi au niveau racine
+function TournamentStoreHydrator() {
+  useTournamentStore()
+  return null
+}
 
 
 // 1. Définition du contexte du routeur pour TypeScript
@@ -169,6 +188,9 @@ function GlobalNotificationListener() {
             .toLowerCase()
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, ""); // Ex: "adhésion" devient "adhesion"
+
+          // Le tirage d'arbre dispose de sa propre fenetre dediee (BracketAssignmentModal)
+          if (cleanMsg.startsWith("tirage")) return;
 
           // 3. PARSAGE DES MESSAGES DE TRANSFERT DE JETONS MANI OU TEMPS
           if (cleanMsg.includes("vous avez recu") && cleanMsg.includes("mani")) {
@@ -346,14 +368,28 @@ function GlobalNotificationListener() {
               {activeTransferModal.type.includes('receive') ? "TRANSFERT REÇU !" : "TRANSFERT ENVOYÉ !"}
             </h3>
             <p className="text-[10px] uppercase font-black tracking-widest text-white/40 mb-6">
-              {activeTransferModal.type.includes('mani') ? "Jetons MANI" : "Minutes d'Evasion"}
+              {activeTransferModal.type.includes('mani') ? (
+                <span className="inline-flex items-center gap-1.5">Jetons <ManiIcon className="w-4 h-4" /></span>
+              ) : (
+                "Minutes d'Evasion"
+              )}
             </p>
 
             <div className="bg-black/50 border border-white/5 rounded-3xl p-6 mb-8 text-center backdrop-blur-sm">
               <p className="text-xs font-bold italic text-white/80 leading-relaxed mt-4">
-                {activeTransferModal.type === 'mani_receive' && `Félicitations ! Vous avez reçu ${activeTransferModal.amount} MANI de la part de @${activeTransferModal.partner}.`}
+                {activeTransferModal.type === 'mani_receive' && (
+                  <span className="inline-flex items-center gap-1.5 flex-wrap justify-center">
+                    Félicitations ! Vous avez reçu {activeTransferModal.amount}
+                    <ManiIcon className="w-5 h-5" /> de la part de @{activeTransferModal.partner}.
+                  </span>
+                )}
                 {activeTransferModal.type === 'time_receive' && `Félicitations ! Vous avez reçu ${activeTransferModal.amount} minutes de crédit temps de la part de @${activeTransferModal.partner}.`}
-                {activeTransferModal.type === 'mani_send' && `Votre transfert de ${activeTransferModal.amount} MANI au joueur @${activeTransferModal.partner} a été validé.`}
+                {activeTransferModal.type === 'mani_send' && (
+                  <span className="inline-flex items-center gap-1.5 flex-wrap justify-center">
+                    Votre transfert de {activeTransferModal.amount}
+                    <ManiIcon className="w-5 h-5" /> au joueur @{activeTransferModal.partner} a été validé.
+                  </span>
+                )}
                 {activeTransferModal.type === 'time_send' && `Votre transfert de ${activeTransferModal.amount} minutes de crédit temps au joueur @${activeTransferModal.partner} a été validé.`}
               </p>
             </div>
@@ -587,6 +623,93 @@ const rootRoute = createRootRouteWithContext<MyRouterContext>()({
   component: () => {
     const { user, logout } = useAuth()
     const { data: metadata } = useUserMetadata()
+    const location = useLocation()
+
+    // Animation d'entree du hero de la Home, generalisee a tout le site :
+    // chaque section (ou bloc principal a defaut) glisse de 60px vers le haut
+    // en fondu, 0.8s, cascade de 0.15s, ease power3.out (meme parametres GSAP).
+    // En useLayoutEffect (avant l'affichage) : pas de flash. Pas de revert() a
+    // chaque navigation : un revert pouvait tuer une animation en cours et
+    // laisser un element bloque a opacity:0 (page vide). Un filet de securite
+    // nettoie les styles une fois l'entree terminee.
+    useLayoutEffect(() => {
+      const mainEl = document.querySelector('main')
+      if (!mainEl) return
+
+      const revealed = new WeakSet<Element>()
+      const failsafes: number[] = []
+
+      const play = (els: Element[]) => {
+        const fresh = els.filter((el) => !revealed.has(el))
+        if (!fresh.length) return
+        fresh.forEach((el) => revealed.add(el))
+
+        gsap.fromTo(
+          fresh,
+          { y: 60, opacity: 0 },
+          {
+            y: 0,
+            opacity: 1,
+            duration: 0.8,
+            stagger: 0.15,
+            ease: 'power3.out',
+            clearProps: 'transform,opacity'
+          }
+        )
+
+        const totalMs = (fresh.length - 1) * 150 + 800 + 600
+        const id = window.setTimeout(() => {
+          fresh.forEach((el) => gsap.set(el, { clearProps: 'transform,opacity' }))
+        }, totalMs)
+        failsafes.push(id)
+      }
+
+      // Collecte universelle des blocs principaux de chaque page :
+      // - Si la page a un conteneur principal (.container), on anime ses blocs enfants (header, onglets, grilles, etc.)
+      // - Si la page est construite en <section> de premier niveau (comme la Home), on anime les <section>
+      // - Sinon, on anime les enfants directs du corps de page
+      const collect = (): Element[] => {
+        const wrapper = mainEl.firstElementChild
+        if (!wrapper) return []
+
+        // 1. Si un ou plusieurs .container existent dans la page (Community, Store, News, Tournaments, etc.)
+        const containers = Array.from(wrapper.querySelectorAll<HTMLElement>('.container'))
+        if (containers.length > 0) {
+          const blocks: HTMLElement[] = []
+          containers.forEach((cnt) => {
+            Array.from(cnt.children).forEach((child) => {
+              // On ignore les overlays d'arriere-plan ou modales fixes
+              if (child instanceof HTMLElement && !child.classList.contains('absolute') && !child.classList.contains('fixed')) {
+                blocks.push(child)
+              }
+            })
+          })
+          if (blocks.length > 0) return blocks
+        }
+
+        // 2. Si la page est structuree en <section> de premier niveau (ex: Home)
+        const sections = Array.from(wrapper.querySelectorAll<HTMLElement>('section')).filter(
+          (s) => !s.parentElement?.closest('section')
+        )
+        if (sections.length > 0) return sections
+
+        // 3. Repli : enfants directs du conteneur de page (en ignorant les arriere-plans absolus)
+        return Array.from(wrapper.children).filter(
+          (el) => el instanceof HTMLElement && !el.classList.contains('absolute') && !el.classList.contains('fixed')
+        )
+      }
+
+      play(collect())
+
+      // Contenu rendu apres coup (donnees Supabase) : anime des qu'il arrive.
+      const observer = new MutationObserver(() => play(collect()))
+      observer.observe(mainEl, { childList: true, subtree: true })
+
+      return () => {
+        observer.disconnect()
+        failsafes.forEach((id) => window.clearTimeout(id))
+      }
+    }, [location.pathname])
 
     const isBanned = (metadata as any)?.is_banned === true;
 
@@ -622,7 +745,11 @@ const rootRoute = createRootRouteWithContext<MyRouterContext>()({
         <Footer />
         <GlobalAdminNotifier />
         <GlobalNotificationListener />
+        <BracketAssignmentModal userId={user?.id} displayName={(metadata as any)?.display_name || user?.email || undefined} /> {/* Fenetre post-tirage d'arbre, visible sur toutes les pages */}
         <RankChangePopup />
+        <GamificationHubWidget /> {/* AJOUTÉ : Hub de gamification flottant (Atelier) */}
+        <CommunityStoreHydrator /> {/* AJOUTÉ : Hydratation du store communautaire (Atelier) */}
+        <TournamentStoreHydrator /> {/* AJOUTÉ : Hydratation du store tournoi (Atelier) */}
         <HotToaster position="bottom-center" /> {/* AJOUTÉ ICI */}
       </div>
     )

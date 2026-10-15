@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { supabase } from '@/lib/supabase'
 import { NeonButton } from '@/components/ui/NeonButton'
+import { CyberCard } from '@/components/ui/CyberCard'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { LogIn, Mail, Lock, X, Loader2, KeyRound } from 'lucide-react'
+import { LogIn, Mail, Lock, X, Loader2, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 
 export function Login() {
@@ -11,14 +12,13 @@ export function Login() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  // États pour la modale "Mot de passe oublié"
   const [isForgotOpen, setIsForgotOpen] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotLoading, setForgotLoading] = useState(false)
 
-  // États pour la validation différée "E-mail non confirmé"
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false)
   const [confirmCode, setConfirmCode] = useState('')
   const [confirmLoading, setConfirmLoading] = useState(false)
@@ -46,10 +46,9 @@ export function Login() {
       navigate({ to: '/dashboard' });
     } catch (error: any) {
       console.error(error);
-      // Gérer l'état où l'utilisateur n'a pas encore validé son adresse e-mail
       if (error.message?.includes("Email not confirmed") || error.message?.includes("not confirmed")) {
         toast.error("Votre adresse e-mail n'a pas encore été vérifiée.", { duration: 5000 })
-        setIsConfirmModalOpen(true) // Ouvrir la modale d'activation OTP
+        setIsConfirmModalOpen(true)
       } else {
         toast.error("Identifiants de connexion incorrects")
       }
@@ -58,14 +57,12 @@ export function Login() {
     }
   }
 
-  // Traiter la validation tardive de l'OTP
   const handleConfirmEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault()
     if (confirmCode.length < 6) return
 
     setConfirmLoading(true)
     try {
-      // Valide l'e-mail et crée le profil
       await verifyOtpAndCreateProfile(email, confirmCode, email.split('@')[0], '')
       toast.success("E-mail validé avec succès ! Connexion en cours...", { position: "bottom-center" })
       setIsConfirmModalOpen(false)
@@ -112,14 +109,18 @@ export function Login() {
 
   return (
     <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen flex items-center justify-center bg-background px-4 relative">
-      <div className="max-w-md w-full glass p-10 rounded-[2.5rem] border-white/5">
-        <h1 className="text-3xl font-display uppercase text-center mb-8">Connexion</h1>
-        <form onSubmit={handleLogin} className="space-y-6 text-left">
+      <CyberCard hoverEffect={false} className="max-w-md w-full p-8 sm:p-10 font-display">
+        <h1 className="text-3xl font-display uppercase text-center mb-2">Connexion</h1>
+        <p className="text-xs text-white/50 text-center font-sans mb-6">
+          Accédez à votre terminal membre The Sanctuary
+        </p>
+
+        <form onSubmit={handleLogin} className="space-y-5 text-left">
           <div>
             <label className="text-[10px] uppercase font-black text-primary tracking-widest ml-1">Email</label>
-            <div className="relative mt-2">
+            <div className="relative mt-1.5">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <input required type="email" placeholder="Saisir votre adresse Gmail" className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 text-white focus:outline-none focus:border-primary text-xs" value={email} onChange={(e) => setEmail(e.target.value)} />
+              <input required type="email" placeholder="nom@sanctuary.cg" className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-12 text-white focus:outline-none focus:border-primary text-xs font-mono" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
           </div>
           <div>
@@ -128,28 +129,39 @@ export function Login() {
               <button 
                 type="button" 
                 onClick={() => setIsForgotOpen(true)}
-                className="text-[8px] font-black uppercase text-white/40 hover:text-white transition-colors"
+                className="text-[8px] font-black uppercase text-white/40 hover:text-white transition-colors cursor-pointer"
               >
                 Mot de passe oublié ?
               </button>
             </div>
-            <div className="relative mt-2">
+            <div className="relative mt-1.5">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <input required type="password" placeholder="Saisir votre mot de passe" className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 text-white focus:outline-none focus:border-primary text-xs" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input required type={showPassword ? 'text' : 'password'} placeholder="••••••••" className="w-full bg-white/5 border border-white/10 rounded-xl py-3.5 pl-12 pr-12 text-white focus:outline-none focus:border-primary text-xs font-mono" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                title={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-white/40 hover:text-primary hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
-          <NeonButton disabled={loading} className="w-full py-4">{loading ? "Identification..." : "Accéder au Hub"}</NeonButton>
+          <NeonButton disabled={loading} className="w-full py-4 text-xs font-black tracking-widest shadow-neon-violet">
+            {loading ? "Identification..." : "Accéder au Hub"}
+          </NeonButton>
         </form>
         <p className="mt-8 text-center text-xs text-muted-foreground uppercase">Nouveau ? <Link to="/register" className="text-primary font-bold">Créer un compte</Link></p>
-      </div>
+      </CyberCard>
 
       {/* POP-UP : MOT DE PASSE OUBLIÉ */}
       {isForgotOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
-          <div className="glass p-8 md:p-10 rounded-[2.5rem] border-2 border-primary shadow-neon-violet max-w-sm w-full relative">
+          <CyberCard variant="violet" hoverEffect={false} className="p-8 md:p-10 max-w-sm w-full text-center">
             <button 
               onClick={() => setIsForgotOpen(false)}
-              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none"
+              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none cursor-pointer"
             >
               <X size={20} />
             </button>
@@ -186,17 +198,17 @@ export function Login() {
                 </NeonButton>
               </div>
             </form>
-          </div>
+          </CyberCard>
         </div>
       )}
 
       {/* POP-UP : ADRESSE E-MAIL NON CONFIRMÉE */}
       {isConfirmModalOpen && (
         <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
-          <div className="glass p-8 md:p-10 rounded-[2.5rem] border-2 border-secondary shadow-neon-cyan max-w-sm w-full relative">
+          <CyberCard variant="cyan" hoverEffect={false} className="p-8 md:p-10 max-w-sm w-full text-center">
             <button 
               onClick={() => setIsConfirmModalOpen(false)}
-              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none"
+              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none cursor-pointer"
             >
               <X size={20} />
             </button>
@@ -236,13 +248,13 @@ export function Login() {
                 <button
                   type="button"
                   onClick={handleResendConfirmCode}
-                  className="text-[9px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors text-center"
+                  className="text-[9px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-colors text-center cursor-pointer"
                 >
                   Renvoyer un code de validation
                 </button>
               </div>
             </form>
-          </div>
+          </CyberCard>
         </div>
       )}
     </div>

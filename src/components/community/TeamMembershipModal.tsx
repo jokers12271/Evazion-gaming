@@ -1,89 +1,80 @@
-import { TeamConfig } from '@/hooks/useTeamMembership'
-import { NeonButton } from '@/components/ui/NeonButton'
-import { Users, X } from 'lucide-react'
-import { useLoyalty } from '@/hooks/useLoyalty'
-import { getRank } from '@/lib/ranks'
-import { cn } from '@blinkdotnew/ui'
+import React from 'react';
+import { CyberCard } from '@/components/ui/CyberCard';
+import { NeonButton } from '@/components/ui/NeonButton';
+import { X, Users, CreditCard, Loader2 } from 'lucide-react';
 
-interface Props {
-  teamId: string
-  config: TeamConfig
-  onClose: () => void
-  onConfirm: () => void
-  isPending: boolean
-}
-
-export function TeamMembershipModal({ teamId, config, onClose, onConfirm, isPending }: Props) {
-  const { data: loyalty } = useLoyalty()
-  const userRank = getRank(loyalty?.total_hours || 0)
-
-  // Calcul de la cotisation mensuelle réduite selon le Rang
-  let finalMonthlyFee = config.monthly_fee
-  let discountLabel = ''
-
-  if (userRank.name === 'Légende') {
-    finalMonthlyFee = Math.round(config.monthly_fee * 0.75)
-    discountLabel = '🏆 Remise de cotisation -25% Rang Légende appliquée'
-  } else if (userRank.name === 'Iconique' || userRank.name === 'Divin') {
-    finalMonthlyFee = Math.round(config.monthly_fee * 0.50)
-    discountLabel = '🏆 Remise de cotisation -50% Rang Iconique/Divin appliquée'
-  }
-
+export function TeamMembershipModal({
+  teamId,
+  config,
+  onClose,
+  onConfirm,
+  isPending
+}: {
+  teamId: string;
+  config: any;
+  onClose: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
-      <div className="glass p-10 rounded-[2.5rem] border-2 border-secondary shadow-neon-cyan max-w-md w-full relative">
-        <button onClick={onClose} className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none">
+    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center font-display">
+      <CyberCard variant="cyan" hoverEffect={false} className="max-w-md w-full p-8 md:p-10 relative text-left">
+        <button
+          onClick={onClose}
+          className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors"
+        >
           <X size={20} />
         </button>
 
-        <div className="w-16 h-16 bg-secondary/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-secondary/30">
-          <Users className="text-secondary animate-pulse" size={32} />
+        <div className="w-14 h-14 rounded-2xl bg-secondary/15 border border-secondary/30 flex items-center justify-center text-secondary mb-5 shadow-neon-cyan">
+          <Users size={28} />
         </div>
 
-        <h3 className="text-2xl font-black uppercase mb-2">Adhésion Team - {teamId}</h3>
-        <p className="text-[10px] uppercase font-black tracking-widest text-secondary mb-6">Règlement des Frais Requis</p>
+        <h3 className="text-2xl font-black uppercase text-white mb-1">
+          Adhésion Team
+        </h3>
+        <p className="text-[10px] uppercase font-mono font-black text-secondary tracking-widest mb-6">
+          ÉQUIPE : {teamId.toUpperCase()}
+        </p>
 
-        {discountLabel && (
-          <div className="bg-secondary/10 border border-secondary/20 px-3 py-2 rounded-xl text-[9px] font-black uppercase text-secondary tracking-wider mb-4 animate-pulse">
-            {discountLabel}
+        <div className="space-y-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10 mb-6 text-xs text-white/80">
+          <div className="flex justify-between items-center pb-2 border-b border-white/5">
+            <span className="text-white/50 uppercase font-mono text-[10px]">Frais d'intégration :</span>
+            <span className="font-bold text-white text-sm">{config?.join_fee || 5000} FCFA</span>
           </div>
-        )}
-
-        <div className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4 mb-8 text-left text-xs font-bold uppercase tracking-tighter">
-          <div className="flex justify-between border-b border-white/5 pb-2">
-            <span className="text-white/40">Frais d'intégration (Unique)</span>
-            <span className="text-white">{config.join_fee} FCFA</span>
+          <div className="flex justify-between items-center pb-2 border-b border-white/5">
+            <span className="text-white/50 uppercase font-mono text-[10px]">Cotisation mensuelle :</span>
+            <span className="font-bold text-secondary text-sm">{config?.monthly_fee || 2000} FCFA</span>
           </div>
-          <div className="flex justify-between border-b border-white/5 pb-2">
-            <span className="text-white/40">Cotisation Mensuelle</span>
-            <span className="text-white">{finalMonthlyFee} FCFA / mois</span>
-          </div>
-          <div className="pt-2 text-center text-[10px] text-white/60 tracking-normal leading-relaxed capitalize-none">
-            Pour régler à distance, effectuez un dépôt Mobile Money au : <br />
-            <span className="text-secondary font-black text-sm tracking-widest block mt-2" translate="no">
-              {config.payment_phone}
-            </span>
-            (Indiquez votre nom de gamer dans le motif)
+          <div className="flex justify-between items-center">
+            <span className="text-white/50 uppercase font-mono text-[10px]">Paiement Mobile / Airtel :</span>
+            <span className="font-bold font-mono text-amber-400">{config?.payment_phone || '+242 06 612 34 56'}</span>
           </div>
         </div>
 
-        <div className="flex flex-col gap-4">
-          <NeonButton 
-            variant="cyan"
-            className="w-full py-4 text-xs font-black shadow-neon-cyan"
-            onClick={onConfirm}
-            disabled={isPending}
-          >
-            {isPending ? "TRANSMISSION..." : "SOUMETTRE MA DEMANDE"}
-          </NeonButton>
-          <button 
+        <p className="text-[10px] text-muted-foreground leading-relaxed mb-6">
+          Après confirmation, votre demande sera soumise à l'administration du Sanctuary. Les privilèges de votre équipe seront activés dès validation.
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
             onClick={onClose}
-            className="text-[10px] font-black uppercase text-white/40 tracking-widest hover:text-white transition-colors focus:outline-none"
+            className="flex-1 py-3 text-xs font-mono uppercase font-black text-white/50 hover:text-white transition-colors"
           >
-            Fermer
+            Annuler
           </button>
+          <NeonButton
+            variant="cyan"
+            disabled={isPending}
+            onClick={onConfirm}
+            className="flex-1 py-3 text-xs font-mono"
+          >
+            {isPending && <Loader2 size={14} className="animate-spin mr-1" />}
+            {isPending ? "Transmission..." : "CONFIRMER L'ADHÉSION"}
+          </NeonButton>
         </div>
-      </div>
+      </CyberCard>
     </div>
-  )
+  );
 }

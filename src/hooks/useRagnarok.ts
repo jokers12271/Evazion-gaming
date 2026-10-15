@@ -27,8 +27,7 @@ export function useRagnarok() {
     queryKey: ['ragnarok_challenges', user?.id],
     queryFn: async () => {
       if (!user) return []
-      const { data, error } = await supabase
-        .from('ragnarok_challenges')
+      const { data, error } = await (supabase.from('ragnarok_challenges') as any)
         .select(`
           *,
           challenger_metadata:users_metadata!challenger_id ( display_name, avatar_url, community_team ),

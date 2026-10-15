@@ -19,8 +19,7 @@ export function ManiTransferHistory({ boxClass, boxStyle }: Props) {
     queryFn: async () => {
       if (!user) return []
 
-      const { data, error } = await supabase
-        .from('mani_transfers')
+      const { data, error } = await (supabase.from('mani_transfers') as any)
         .select(`
           *,
           sender:sender_id ( display_name ),

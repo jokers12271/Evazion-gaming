@@ -1,181 +1,57 @@
-import { useState } from 'react'
-import { NeonButton } from '@/components/ui/NeonButton'
-import { Info, X, Zap, Award, Users, ShieldAlert } from 'lucide-react'
-import { cn } from '@blinkdotnew/ui'
+import React from 'react';
+import { ManiIcon } from '@/components/ui/ManiIcon';
+import { Shield, Sparkles, Trophy, Cpu, Gamepad2, Users } from 'lucide-react';
+import { CyberCard } from '@/components/ui/CyberCard';
 
 export function AboutUsSection() {
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [activeStep, setActiveStep] = useState(0)
-
-  const steps = [
-    { title: "1. S'inscrire", desc: "Créez votre carte de membre numérique gratuite en quelques secondes pour démarrer votre suivi." },
-    { title: "2. Jouer (Miner)", desc: "Chaque minute de jeu sur nos PS5 est enregistrée pour faire grimper votre niveau et votre Rang." },
-    { title: "3. Récolter", desc: "Toutes les 4h de jeu, recevez 1 MANI. Échangez-les dans le Store contre des boissons, bonus ou cadeaux." }
-  ]
-
   return (
-    <section className="py-16 md:py-24 bg-background border-t border-white/5 relative overflow-hidden z-20 text-left">
-      <div className="container mx-auto px-5 max-w-6xl">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          
-          {/* Bloc de Gauche : Description Courte et Bouton d'action */}
-          <div className="space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full glass border-white/10 text-white">
-              <Info className="text-primary" size={14} />
-              <span className="text-[9px] uppercase tracking-[0.2em] font-black">L'univers Evazion</span>
-            </div>
-            
-            <h2 className="text-3xl sm:text-5xl font-display font-black uppercase text-white leading-tight">
-              THE SANCTUARY : <br />
-              <span className="text-primary italic">PLUS QU'UNE SALLE</span>
-            </h2>
+    <section className="py-16 md:py-24 bg-background relative border-t border-white/5 text-center">
+      <div className="container mx-auto px-5 max-w-5xl">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 mb-4">
+          <Cpu className="text-secondary animate-pulse" size={14} />
+          <span className="text-[9px] uppercase tracking-widest font-black text-white">Le Sanctuaire E-Sport</span>
+        </div>
 
-            <p className="text-sm text-muted-foreground leading-relaxed font-semibold">
-              Situé au cœur de Brazzaville, <strong>Evazion (The Sanctuary)</strong> est le repaire d'élite pour les passionnés de PS5. Plus qu'une simple salle de jeux, nous offrons un écosystème entièrement ludifié où chaque minute passée à jouer vous rapproche du statut de Légende.
+        <h2 className="text-3xl sm:text-5xl md:text-7xl font-display font-black uppercase text-white mb-6">
+          À PROPOS DU <span className="text-primary italic">SANCTUARY</span>
+        </h2>
+
+        <p className="text-muted-foreground text-xs sm:text-sm max-w-2xl mx-auto uppercase tracking-wider font-bold leading-relaxed mb-12">
+          Plus qu'une simple salle de jeux, The Sanctuary est le temple de la compétition et du divertissement nouvelle génération au cœur de Brazzaville.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+          <CyberCard variant="cyan" className="p-6 md:p-8">
+            <div className="w-12 h-12 rounded-xl bg-secondary/15 flex items-center justify-center text-secondary mb-4 border border-secondary/30">
+              <Gamepad2 size={24} />
+            </div>
+            <h3 className="text-xl font-display font-black uppercase text-white mb-2">Matériel de Pointe</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Consoles PlayStation 5 Pro exclusives, manettes DualSense Edge et écrans 4K HDR 120Hz configurés pour la réactivité esport.
             </p>
+          </CyberCard>
 
-            <div className="pt-2">
-              <NeonButton 
-                variant="violet" 
-                size="sm"
-                onClick={() => setIsModalOpen(true)}
-                className="text-[10px] font-black tracking-widest px-6 py-3"
-              >
-                EN SAVOIR PLUS & CHARTE
-              </NeonButton>
+          <CyberCard variant="violet" className="p-6 md:p-8">
+            <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center text-primary mb-4 border border-primary/30">
+              <Trophy size={24} />
             </div>
-          </div>
+            <h3 className="text-xl font-display font-black uppercase text-white mb-2 flex items-center gap-2">Système de Rang & <ManiIcon className="w-5 h-5" /></h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Votre temps passé en salle est récompensé. Chaque heure vous rapproche d'un rang supérieur et débloque des <ManiIcon className="w-3.5 h-3.5" /> échangeables.
+            </p>
+          </CyberCard>
 
-          {/* Bloc de Droite ("Something Else") : Le guide de démarrage interactif */}
-          <div className="glass p-8 rounded-[2.5rem] border-white/5 relative overflow-hidden">
-            <h3 className="text-xs font-black uppercase tracking-widest text-secondary mb-6 flex items-center gap-2">
-              <Zap size={14} className="animate-pulse" />
-              GUIDE DE SURVIE EN SALLE
-            </h3>
-
-            <div className="space-y-4">
-              {steps.map((step, idx) => (
-                <div 
-                  key={idx}
-                  onClick={() => setActiveStep(idx)}
-                  className={cn(
-                    "p-4 rounded-2xl border transition-all duration-300 cursor-pointer text-white",
-                    activeStep === idx 
-                      ? "border-secondary/40 bg-secondary/5" 
-                      : "border-white/5 hover:border-white/10 bg-transparent"
-                  )}
-                >
-                  <h4 className={cn(
-                    "text-xs font-black uppercase tracking-wider mb-1",
-                    activeStep === idx ? "text-secondary" : "text-white/80"
-                  )}>
-                    {step.title}
-                  </h4>
-                  {activeStep === idx && (
-                    <p className="text-[11px] text-muted-foreground leading-normal mt-2 animate-fade-in font-medium">
-                      {step.desc}
-                    </p>
-                  )}
-                </div>
-              ))}
+          <CyberCard variant="orange" className="p-6 md:p-8">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-400 mb-4 border border-amber-500/30">
+              <Users size={24} />
             </div>
-          </div>
-
+            <h3 className="text-xl font-display font-black uppercase text-white mb-2">Esprit de Communauté</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Rejoignez ou formez votre Team de jeu, lancez des défis Ragnarok en direct et hissez vos couleurs au sommet du classement.
+            </p>
+          </CyberCard>
         </div>
       </div>
-
-      {/* FENÊTRE MODALE IMMERSIVE : CHARTE COMPLÈTE DU SANCTUARY */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
-          <div className="glass p-8 md:p-10 rounded-[3rem] border-2 border-primary shadow-neon-violet max-w-2xl w-full relative flex flex-col gap-6 max-h-[90vh] overflow-y-auto custom-scrollbar">
-            
-            {/* Bouton Fermer */}
-            <button 
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none"
-              title="Fermer"
-            >
-              <X size={24} />
-            </button>
-
-            <div className="text-center space-y-2">
-              <h3 className="text-2xl md:text-3xl font-black uppercase text-glow-violet text-primary">
-                La Charte du Sanctuary
-              </h3>
-              <p className="text-[9px] uppercase tracking-widest text-white/40 font-black">
-                Règles et Fonctionnement d'Evazion
-              </p>
-            </div>
-
-            {/* Corps de la charte */}
-            <div className="space-y-6 text-left border-t border-white/5 pt-6 text-xs sm:text-sm text-white/80 leading-relaxed font-semibold">
-              
-              <div className="flex gap-4">
-                <div className="p-2.5 bg-primary/10 rounded-xl h-fit border border-primary/20 text-primary">
-                  <Award size={18} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-black uppercase text-white mb-1">L'Échelle de Puissance</h4>
-                  <p className="text-xs text-muted-foreground font-medium">
-                    Chaque minute passée sur nos consoles PS5 est enregistrée sur votre carte de membre numérique. Progressez à travers nos Rangs (de Régulier à Divin) et débloquez des avantages en direct (recharges de temps gratuites, boissons, réductions aux tournois).
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="p-2.5 bg-secondary/10 rounded-xl h-fit border border-secondary/20 text-secondary">
-                  <Zap size={18} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-black uppercase text-white mb-1">Le Minage de MANI</h4>
-                  <p className="text-xs text-muted-foreground font-medium">
-                    Le temps de jeu se transforme en valeur. Toutes les 4 heures jouées, gagnez 1 MANI, notre monnaie interne. Utilisez vos jetons dans la Boutique pour réclamer des consommables ou des droits spéciaux d'arène.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="p-2.5 bg-accent/10 rounded-xl h-fit border border-accent/20 text-accent">
-                  <Users size={18} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-black uppercase text-white mb-1">Teams & Défis Ragnarok</h4>
-                  <p className="text-xs text-muted-foreground font-medium">
-                    Rejoignez une Team de jeu (FC 26, Tekken, etc.), cotisez de manière collaborative pour vos sessions d'équipe et provoquez vos rivaux directs dans l'Arène Ragnarok en mettant en jeu vos heures de rang ou vos MANI.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4 border-t border-white/5 pt-6">
-                <div className="p-2.5 bg-red-500/10 rounded-xl h-fit border border-red-500/20 text-red-500">
-                  <ShieldAlert size={18} />
-                </div>
-                <div>
-                  <h4 className="text-sm font-black uppercase text-white mb-1 text-red-400">Le Code de Conduite</h4>
-                  <p className="text-xs text-muted-foreground font-medium">
-                    Respect absolu, fair-play exemplaire et camaraderie sont exigés au Sanctuary. Les attitudes toxiques ou le non-respect du matériel haut de gamme entraînent des sanctions ou des suspensions administratives immédiates.
-                  </p>
-                </div>
-              </div>
-
-            </div>
-
-            {/* Bouton de Fermeture Inférieur */}
-            <div className="border-t border-white/5 pt-6 shrink-0">
-              <NeonButton 
-                variant="ghost"
-                className="w-full py-4 text-xs font-black"
-                style={{ borderColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.6)' }}
-                onClick={() => setIsModalOpen(false)}
-              >
-                Retourner sur le site
-              </NeonButton>
-            </div>
-
-          </div>
-        </div>
-      )}
-
     </section>
-  )
+  );
 }

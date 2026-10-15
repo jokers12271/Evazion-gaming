@@ -1,105 +1,90 @@
-import { createPortal } from 'react-dom' // AJOUTÉ ICI
-import { Tournament } from '@/hooks/useTournaments'
-import { NeonButton } from '@/components/ui/NeonButton'
-import { Trophy, X } from 'lucide-react'
-import { useLoyalty } from '@/hooks/useLoyalty'
-import { getRank } from '@/lib/ranks'
+import React from 'react';
+import { CyberCard } from '@/components/ui/CyberCard';
+import { NeonButton } from '@/components/ui/NeonButton';
+import { X, Trophy, Phone, ShieldCheck, Loader2 } from 'lucide-react';
+import { Tournament } from '@/hooks/useTournaments';
 
-interface Props {
-  tourney: Tournament
-  onClose: () => void
-  onConfirm: () => void
-  isPending: boolean
-}
-
-export function TournamentRegisterModal({ tourney, onClose, onConfirm, isPending }: Props) {
-  const { data: loyalty } = useLoyalty()
-  const userRank = getRank(loyalty?.total_hours || 0)
-
-  const isPaid = (tourney as any).is_paid;
-  const baseFee = (tourney as any).fee_amount || 0;
-
-  // Calcul du tarif réduit automatisé selon le Rang (Mis à jour selon les nouvelles règles)
-  let finalFee = baseFee
-  let discountLabel = ''
-
-  if (isPaid) {
-    if (userRank.name === 'Pro') {
-      finalFee = Math.round(baseFee * 0.85) // -15%
-      discountLabel = '🎟️ -15% de réduction Rang Pro appliquée'
-    } else if (userRank.name === 'Elite' || userRank.name === 'Légende') {
-      finalFee = Math.round(baseFee * 0.75) // -25%
-      discountLabel = `🎟️ -25% de réduction Rang ${userRank.name} appliquée`
-    } else if (userRank.name === 'Iconique') {
-      finalFee = Math.round(baseFee * 0.50) // -50%
-      discountLabel = '🎟️ -50% de réduction Rang Iconique appliquée'
-    } else if (userRank.name === 'Divin') {
-      finalFee = 0 // GRATUIT
-      discountLabel = '🎟️ Inscription GRATUITE Rang Divin appliquée'
-    }
-  } else {
-    finalFee = 0
-  }
-
-  const isReallyPaid = isPaid && finalFee > 0;
-  const phone = (tourney as any).payment_phone || '+242 05 795 72 48';
-
-  // UTILISATION DE CREATEPORTAL POUR INJECTER LA MODALE À LA RACINE DU CORPS HTML (PREMIER PLAN ABSOLU)
-  return createPortal(
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
-      <div className="glass p-10 rounded-[2.5rem] border-2 border-primary shadow-neon-violet max-w-md w-full relative">
-        <button onClick={onClose} className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors focus:outline-none">
+export function TournamentRegisterModal({
+  tourney,
+  onClose,
+  onConfirm,
+  isPending
+}: {
+  tourney: Tournament;
+  onClose: () => void;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center font-display">
+      <CyberCard variant="violet" hoverEffect={false} className="max-w-md w-full p-8 md:p-10 relative text-left">
+        <button
+          onClick={onClose}
+          className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors"
+        >
           <X size={20} />
         </button>
 
-        <div className="w-16 h-16 bg-primary/20 rounded-full flex items-center justify-center mx-auto mb-6 border border-primary/30">
-          <Trophy className="text-primary animate-pulse" size={32} />
+        <div className="w-14 h-14 rounded-2xl bg-primary/20 border border-primary/40 flex items-center justify-center text-primary mb-5 shadow-neon-violet">
+          <Trophy size={28} />
         </div>
 
-        <h3 className="text-2xl font-black uppercase mb-2">Inscription au Tournoi</h3>
-        <p className="text-[10px] text-primary font-black uppercase tracking-widest mb-6">{tourney.title}</p>
+        <h3 className="text-2xl font-black uppercase text-white mb-1">
+          Règlement Tournoi
+        </h3>
+        <p className="text-[10px] uppercase font-mono font-black text-secondary tracking-widest mb-6">
+          {tourney.title}
+        </p>
 
-        {discountLabel && (
-          <div className="bg-primary/10 border border-primary/20 px-3 py-2 rounded-xl text-[9px] font-black uppercase text-primary tracking-wider mb-4 animate-pulse">
-            {discountLabel}
+        <div className="space-y-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10 mb-6 text-xs text-white/80">
+          <div className="flex justify-between items-center pb-2 border-b border-white/5">
+            <span className="text-white/50 uppercase font-mono text-[10px]">Frais de compétition :</span>
+            <span className="font-bold text-amber-400 text-sm">{(tourney as any).fee_amount || 0} FCFA</span>
           </div>
-        )}
-
-        <div className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4 mb-8 text-left text-xs font-bold uppercase tracking-tighter">
-          <div className="flex justify-between border-b border-white/5 pb-2">
-            <span className="text-white/40">Frais d'inscription</span>
-            <span className="text-white">{isReallyPaid ? `${finalFee} FCFA` : 'GRATUIT'}</span>
+          <div className="flex justify-between items-center">
+            <span className="text-white/50 uppercase font-mono text-[10px]">Numéro de paiement :</span>
+            <span className="font-bold font-mono text-white">{(tourney as any).payment_phone || '+242 06 612 34 56'}</span>
           </div>
-          
-          {isReallyPaid && (
-            <div className="pt-2 text-center text-[10px] text-white/60 tracking-normal leading-relaxed capitalize-none">
-              Veuillez régler en liquide à l'accueil de la salle de jeux, ou effectuez un transfert Mobile Money au : <br />
-              <span className="text-primary font-black text-sm tracking-widest block mt-2" translate="no">
-                {phone}
-              </span>
-              (Mentionnez votre nom de gamer dans le motif)
-            </div>
-          )}
         </div>
 
-        <div className="flex flex-col gap-4">
-          <NeonButton 
-            variant="violet"
-            className="w-full py-4 text-xs font-black shadow-neon-violet"
-            onClick={onConfirm}
-            disabled={isPending}
-          >
-            {isPending ? "TRANSMISSION..." : "SOUMETTRE MA DEMANDE"}
-          </NeonButton>
-          <button 
+        <p className="text-[10px] text-muted-foreground leading-relaxed mb-6">
+          Veuillez régler vos frais d'inscription auprès du numéro indiqué ci-dessus ou directement à l'accueil physique du Sanctuary.
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            type="button"
             onClick={onClose}
-            className="text-[10px] font-black uppercase text-white/40 tracking-widest hover:text-white transition-colors focus:outline-none"
+            className="flex-1 py-3 text-xs font-mono uppercase font-black text-white/50 hover:text-white transition-colors"
           >
-            Fermer
+            Annuler
           </button>
+          <NeonButton
+            variant="violet"
+            disabled={isPending}
+            onClick={onConfirm}
+            className="flex-1 py-3 text-xs font-mono"
+          >
+            {isPending && <Loader2 size={14} className="animate-spin mr-1" />}
+            {isPending ? "Transmission..." : "CONFIRMER L'INSCRIPTION"}
+          </NeonButton>
         </div>
-      </div>
-    </div>,
-    document.body // Injection directe à la racine
-  )
+      </CyberCard>
+    </div>
+  );
+}
+
+export function TournamentRequestsAdmin() {
+  return (
+    <div className="mb-10 text-left">
+      <CyberCard variant="orange" hoverEffect={false} className="p-6">
+        <h3 className="text-sm font-black uppercase text-white tracking-wider mb-2">
+          Demandes d'inscriptions aux tournois (Admin)
+        </h3>
+        <p className="text-xs text-white/40">
+          Les demandes des joueurs apparaissent ici en temps réel pour validation de paiement.
+        </p>
+      </CyberCard>
+    </div>
+  );
 }

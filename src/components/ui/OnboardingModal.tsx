@@ -1,118 +1,119 @@
-import { useState, useEffect } from 'react'
-import { NeonButton } from '@/components/ui/NeonButton'
-import { X, ArrowRight, Check } from 'lucide-react'
-import { cn } from '@blinkdotnew/ui'
+import React, { useState, useEffect, ReactNode } from 'react';
+import { X, ChevronRight, HelpCircle } from 'lucide-react';
+import { CyberCard } from './CyberCard';
+import { NeonButton } from './NeonButton';
 
 export interface OnboardingStep {
-  title: string
-  desc: string
-  icon?: React.ReactNode
+  title: string;
+  desc: string;
+  icon: ReactNode;
 }
 
-interface Props {
-  pageKey: string // ex: 'home', 'salon', 'reservation', 'news', 'store', 'community', 'dashboard'
-  steps: OnboardingStep[]
-  onClose?: () => void
-}
-
-export function OnboardingModal({ pageKey, steps, onClose }: Props) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [currentStep, setCurrentStep] = useState(0)
+export function OnboardingModal({
+  pageKey,
+  steps
+}: {
+  pageKey: string;
+  steps: OnboardingStep[];
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
 
   useEffect(() => {
-    // Vérifier si le joueur a déjà vu le guide pour cette page spécifique à vie sur ce navigateur
-    const hasSeenTour = localStorage.getItem(`evazion_tour_${pageKey}`)
-    
-    if (!hasSeenTour) {
-      setIsOpen(true)
-      
-      // Déclencher la sonnerie d'accueil d'Evazion
-      try {
-        const audio = new Audio('/alert.mp3')
-        audio.play().catch(e => console.log("Audio blocké :", e))
-      } catch (soundErr) {
-        console.error("Échec son d'onboarding :", soundErr)
-      }
+    const seen = localStorage.getItem(`sanctuary_guide_${pageKey}`);
+    if (!seen) {
+      setIsOpen(true);
     }
-  }, [pageKey])
+  }, [pageKey]);
+
+  const handleClose = () => {
+    localStorage.setItem(`sanctuary_guide_${pageKey}`, 'true');
+    setIsOpen(false);
+  };
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
-      setCurrentStep(prev => prev + 1)
+      setCurrentStep(s => s + 1);
     } else {
-      // Clôturer définitivement l'onboarding pour cette page sur cet appareil
-      localStorage.setItem(`evazion_tour_${pageKey}`, 'true')
-      setIsOpen(false)
-      if (onClose) onClose()
+      handleClose();
     }
-  }
-
-  const handleSkip = () => {
-    localStorage.setItem(`evazion_tour_${pageKey}`, 'true')
-    setIsOpen(false)
-    if (onClose) onClose()
-  }
-
-  if (!isOpen || steps.length === 0) return null
-
-  const activeStepData = steps[currentStep]
+  };
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9999] flex items-center justify-center p-4 animate-fade-in text-center text-white font-display">
-      <div 
-        className="glass p-8 md:p-10 rounded-[3rem] border-2 border-primary shadow-neon-violet max-w-md w-full relative overflow-hidden flex flex-col items-center justify-center"
-        style={{ borderColor: 'var(--primary)' }}
+    <>
+      {/* Floating help launcher */}
+      <button
+        onClick={() => {
+          setCurrentStep(0);
+          setIsOpen(true);
+        }}
+        title="Guide du Hub"
+        className="fixed bottom-6 right-6 z-40 p-3 rounded-full bg-black/80 border border-white/20 text-white/70 hover:text-white hover:border-secondary shadow-neon-cyan transition-all hover:scale-110"
       >
-        {/* Halo lumineux */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+        <HelpCircle size={20} className="text-secondary animate-pulse" />
+      </button>
 
-        {/* Bouton passer le guide */}
-        <button 
-          onClick={handleSkip} 
-          className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors text-[9px] font-black uppercase tracking-widest focus:outline-none"
-        >
-          Passer le guide
-        </button>
+      {isOpen && steps[currentStep] && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in text-center">
+          <CyberCard variant="cyan" hoverEffect={false} className="max-w-md w-full p-8 md:p-10 relative">
+            <button
+              onClick={handleClose}
+              className="absolute top-6 right-6 text-white/40 hover:text-white transition-colors"
+            >
+              <X size={20} />
+            </button>
 
-        {/* Icône de l'étape active */}
-        <div className="w-16 h-16 bg-primary/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-primary/30 text-primary">
-          {activeStepData.icon || <span>✨</span>}
-        </div>
+            <div className="w-16 h-16 rounded-2xl bg-secondary/15 border border-secondary/30 flex items-center justify-center mx-auto mb-6 text-secondary shadow-neon-cyan">
+              {steps[currentStep].icon}
+            </div>
 
-        {/* Titre et description de l'étape active */}
-        <h3 className="text-xl md:text-2xl font-black uppercase mb-3 text-primary text-glow-violet leading-none tracking-tight">
-          {activeStepData.title}
-        </h3>
-        <p className="text-xs md:text-sm text-white/70 leading-relaxed font-semibold mb-8 min-h-[60px]">
-          {activeStepData.desc}
-        </p>
+            <div className="flex items-center justify-center gap-1.5 mb-2">
+              {steps.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1.5 rounded-full transition-all ${
+                    i === currentStep ? 'w-6 bg-secondary' : 'w-2 bg-white/20'
+                  }`}
+                />
+              ))}
+            </div>
 
-        {/* Barre de progression des étapes */}
-        {steps.length > 1 && (
-          <div className="flex justify-center gap-2 mb-8">
-            {steps.map((_, idx) => (
-              <div 
-                key={idx} 
-                className={cn(
-                  "h-1.5 rounded-full transition-all duration-300",
-                  idx === currentStep ? "w-6 bg-primary" : "w-1.5 bg-white/10"
+            <span className="text-[9px] font-mono font-black uppercase tracking-widest text-secondary block mb-1">
+              GUIDE DU MEMBRE ({currentStep + 1}/{steps.length})
+            </span>
+
+            <h3 className="text-2xl font-display font-black uppercase text-white mb-3 tracking-tight">
+              {steps[currentStep].title}
+            </h3>
+
+            <p className="text-xs text-muted-foreground leading-relaxed mb-8">
+              {steps[currentStep].desc}
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleClose}
+                className="flex-1 py-3 text-xs font-mono uppercase font-black text-white/50 hover:text-white transition-colors"
+              >
+                Passer
+              </button>
+              <NeonButton
+                variant="cyan"
+                onClick={handleNext}
+                className="flex-1 py-3 text-xs font-mono"
+              >
+                {currentStep < steps.length - 1 ? (
+                  <>
+                    Suivant <ChevronRight size={14} />
+                  </>
+                ) : (
+                  'Compris !'
                 )}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Bouton de progression */}
-        <NeonButton 
-          variant="violet"
-          className="w-full py-4 text-xs font-black flex items-center justify-center gap-2"
-          onClick={handleNext}
-        >
-          <span>{currentStep === steps.length - 1 ? "C'EST PARTI !" : "SUIVANT"}</span>
-          {currentStep === steps.length - 1 ? <Check size={14} /> : <ArrowRight size={14} />}
-        </NeonButton>
-
-      </div>
-    </div>
-  )
+              </NeonButton>
+            </div>
+          </CyberCard>
+        </div>
+      )}
+    </>
+  );
 }

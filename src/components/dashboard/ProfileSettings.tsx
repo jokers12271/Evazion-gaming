@@ -1,300 +1,130 @@
-import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/hooks/useAuth'
-import { NeonButton } from '@/components/ui/NeonButton'
-import { User, Image as ImageIcon, Lock, CheckCircle2, Loader2 } from 'lucide-react'
-import { toast } from 'react-hot-toast'
-import { useQueryClient } from '@tanstack/react-query'
-import { cn } from '@blinkdotnew/ui' // <-- AJOUTÉ
+import React, { useState } from 'react';
+import { NeonButton } from '@/components/ui/NeonButton';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
+import { ImageUploadInput } from '@/components/ui/ImageUploadInput';
+import { Lock, User } from 'lucide-react';
 
-interface Props {
-  metadata: any
-  onClose?: () => void
-}
+export function ProfileSettings({ metadata, onClose }: { metadata: any; onClose: () => void }) {
+  const [displayName, setDisplayName] = useState(metadata?.display_name || '');
+  const [avatarUrl, setAvatarUrl] = useState(metadata?.avatar_url || '');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
-export function ProfileSettings({ metadata, onClose }: Props) {
-  const { user } = useAuth()
-  const queryClient = useQueryClient()
-  const [displayName, setDisplayName] = useState(metadata?.display_name || '')
-  const [avatarUrl, setAvatarUrl] = useState(metadata?.avatar_url || '')
-  const [newPassword, setNewPassword] = useState('')
-  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false)
-  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
-
-  // NOUVEAUX ÉTATS : Options d'image de profil (AJOUTÉ)
-  const [avatarOption, setAvatarOption] = useState<'upload' | 'url'>('upload')
-  const [isUploading, setIsUploading] = useState(false)
-
-  // AJOUTÉ : Fonction de validation globale de force du mot de passe
-  const validatePasswordStrength = (pass: string): string | null => {
-    const hasUppercase = /[A-Z]/.test(pass);
-    const hasLowercase = /[a-z]/.test(pass);
-    const hasDigit = /[0-9]/.test(pass);
-    const hasSpecial = /[^A-Za-z0-9]/.test(pass);
-    const isAtLeast6Char = pass.length >= 6;
-
-    if (!isAtLeast6Char) return "Le mot de passe doit faire au moins 6 caractères.";
-    if (!hasUppercase) return "Le mot de passe doit contenir au moins une lettre majuscule (A-Z).";
-    if (!hasLowercase) return "Le mot de passe doit contenir au moins une lettre minuscule (a-z).";
-    if (!hasDigit) return "Le mot de passe doit contenir au moins un chiffre (0-9).";
-    if (!hasSpecial) return "Le mot de passe doit contenir au moins un caractère spécial (ex: @, $, !, %).";
-
-    return null; // Mot de passe conforme !
-  }
-
-  // GESTION DU TÉLÉCHARGEMENT DIRECT DE PHOTO EN BASE (SÉCURISÉE)
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (file.size > 2 * 1024 * 1024) {
-      return toast.error("L'image est trop lourde. Limite fixée à 2 Mo maximum.")
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword && newPassword !== confirmPassword) {
+      toast.error("Les mots de passe ne correspondent pas.");
+      return;
     }
 
-    setIsUploading(true)
+    setLoading(true);
     try {
-      const fileExt = file.name.split('.').pop()
-      // Utiliser l'ID de l'utilisateur pour écraser proprement sa propre photo s'il la change
-      const filePath = `${user?.id || Math.random()}.${fileExt}`
+      await supabase.from('users_metadata').update({
+        display_name: displayName,
+        avatar_url: avatarUrl
+      }).eq('user_id', metadata.user_id);
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, { upsert: true }) // AJOUTÉ : Remplacement autorisé (upsert)
+      const updateData: any = {
+        display_name: displayName,
+        avatar_url: avatarUrl
+      };
 
-      if (uploadError) throw uploadError
-
-      const { data } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath)
-
-      setAvatarUrl(data.publicUrl)
-      toast.success("Image importée avec succès !", { position: "top-center" })
-    } catch (err: any) {
-      console.error("Erreur de téléversement :", err)
-      toast.error(err.message || "Échec de l'importation de l'image.", { position: "top-center" }) // MODIFIÉ (Explicite)
-    } finally {
-      setIsUploading(false)
-    }
-  }
-
-  // 1. Mise à jour du profil (Pseudo & Avatar)
-  const handleUpdateProfile = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user) return
-
-    const cleanName = displayName.trim()
-    if (!cleanName) return toast.error("Le nom de gamer ne peut pas être vide.")
-
-    setIsUpdatingProfile(true)
-    try {
-      if (cleanName !== metadata?.display_name) {
-        const { data: existing, error: checkErr } = await supabase
-          .from('users_metadata')
-          .select('user_id')
-          .eq('display_name', cleanName)
-          .neq('user_id', user.id)
-          .maybeSingle()
-
-        if (checkErr) throw checkErr
-        if (existing) {
-          throw new Error(`Le nom de gamer "${cleanName}" est déjà pris.`);
-        }
+      if (newPassword) {
+        updateData.password = newPassword;
       }
 
-      const { error: metaErr } = await supabase
-        .from('users_metadata')
-        .update({ display_name: cleanName, avatar_url: avatarUrl })
-        .eq('user_id', user.id)
+      await supabase.auth.updateUser(updateData);
 
-      if (metaErr) throw metaErr
-
-      const { error: loyaltyErr } = await supabase
-        .from('loyalty_points')
-        .update({ display_name: cleanName })
-        .eq('user_id', user.id)
-
-      if (loyaltyErr) throw loyaltyErr
-
-      toast.success("Profil mis à jour avec succès !", {
-        position: "bottom-center"
-      })
-
-      queryClient.invalidateQueries({ queryKey: ['user_metadata', user.id] })
-      queryClient.invalidateQueries({ queryKey: ['loyalty_points', user.id] })
-      if (onClose) onClose()
+      queryClient.invalidateQueries({ queryKey: ['user_metadata'] });
+      toast.success("Profil mis à jour avec succès !");
+      onClose();
     } catch (err: any) {
-      toast.error(err.message || "Erreur de mise à jour du profil.")
+      toast.error(err.message || "Erreur de sauvegarde");
     } finally {
-      setIsUpdatingProfile(false)
+      setLoading(false);
     }
-  }
-
-  // 2. Mise à jour du mot de passe avec validation forte
-  const handleUpdatePassword = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    // Validation renforcée
-    const passwordError = validatePasswordStrength(newPassword)
-    if (passwordError) {
-      return toast.error(passwordError, { position: "bottom-center" })
-    }
-
-    setIsUpdatingPassword(true)
-    try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword })
-      if (error) throw error
-
-      toast.success("Votre mot de passe a été modifié !", {
-        position: "bottom-center"
-      })
-      setNewPassword('')
-      if (onClose) onClose()
-    } catch (err: any) {
-      toast.error(err.message || "Erreur lors du changement de mot de passe.")
-    } finally {
-      setIsUpdatingPassword(false)
-    }
-  }
+  };
 
   return (
-    <div className="space-y-8 animate-fade-in text-left text-white font-display">
-      
-      {/* FORMULAIRE INFORMATIONS */}
-      <form onSubmit={handleUpdateProfile} className="space-y-4 bg-white/[0.02] border border-white/5 p-6 rounded-3xl">
-        <h4 className="text-xs font-black uppercase tracking-widest text-secondary mb-4 flex items-center gap-2">
-          <User size={14} /> Informations du compte
-        </h4>
+    <form onSubmit={handleSave} className="space-y-3 text-left text-[11px]">
+      <div className="text-center pb-2 border-b border-white/10">
+        <h3 className="text-xs font-display font-black uppercase text-white">Paramètres du Compte</h3>
+        <p className="text-[8px] text-white/50">Modifiez votre profil et votre mot de passe</p>
+      </div>
 
-        <div className="space-y-1.5">
-          <label className="text-[9px] uppercase font-black text-white/40 tracking-wider">Nom de Gamer (Unique)</label>
+      <div>
+        <label className="text-[9px] uppercase font-black text-secondary tracking-widest block mb-1">
+          Nom de Gamer (Pseudo)
+        </label>
+        <div className="relative">
+          <User size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
           <input
             required
             type="text"
-            translate="no"
             value={displayName}
             onChange={e => setDisplayName(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-secondary"
+            className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-9 pr-3 text-[11px] text-white focus:outline-none focus:border-primary"
           />
         </div>
+      </div>
 
-        {/* SECTEUR DOUBLE OPTION D'IMAGE DE PROFIL (AJOUTÉ) */}
-        <div className="space-y-1.5">
-          <label className="text-[9px] uppercase font-black text-white/40 tracking-wider">Photo de profil (Avatar)</label>
-          
-          <div className="flex gap-2 mt-1 mb-2.5">
-            <button
-              type="button"
-              onClick={() => { setAvatarOption('upload'); setAvatarUrl(''); }}
-              className={cn(
-                "flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-wider border transition-all",
-                avatarOption === 'upload' ? "border-secondary bg-secondary/15 text-secondary" : "border-white/5 bg-white/5 text-white/40 hover:text-white"
-              )}
-            >
-              📁 Importer de la galerie
-            </button>
-            <button
-              type="button"
-              onClick={() => { setAvatarOption('url'); setAvatarUrl(''); }}
-              className={cn(
-                "flex-1 py-1.5 rounded-lg text-[8px] font-black uppercase tracking-wider border transition-all",
-                avatarOption === 'url' ? "border-secondary bg-secondary/15 text-secondary" : "border-white/5 bg-white/5 text-white/40 hover:text-white"
-              )}
-            >
-              🔗 Saisir un lien URL
-            </button>
-          </div>
+      <div>
+        <ImageUploadInput
+          value={avatarUrl}
+          onChange={setAvatarUrl}
+          label="Avatar (Stockage local / Fichier ou URL)"
+        />
+      </div>
 
-          {avatarOption === 'url' ? (
-            <div className="relative animate-fade-in">
-              <ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={14} />
-              <input
-                type="text"
-                placeholder="https://..."
-                value={avatarUrl}
-                onChange={e => setAvatarUrl(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-xs text-white focus:outline-none focus:border-secondary"
-              />
-            </div>
-          ) : (
-            <div className="relative animate-fade-in">
-              <input 
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                id="profile-avatar-upload-input"
-                className="hidden"
-                disabled={isUploading}
-              />
-              <label
-                htmlFor="profile-avatar-upload-input"
-                className="w-full bg-white/5 border border-white/10 hover:border-secondary rounded-xl py-3 px-4 text-white text-xs flex items-center justify-center gap-2 cursor-pointer transition-all uppercase font-black text-[9px] tracking-wider"
-              >
-                {isUploading ? <Loader2 className="animate-spin text-secondary" size={14} /> : <ImageIcon size={14} />}
-                {isUploading ? "IMPORTATION..." : (avatarUrl ? "IMAGE ENREGISTRÉE (MODIFIER)" : "CHOISIR DEPUIS L'APPAREIL")}
-              </label>
-            </div>
-          )}
-        </div>
-
-        <div className="pt-2">
-          <NeonButton
-            type="submit"
-            variant="cyan"
-            disabled={isUpdatingProfile}
-            className="w-full py-3 text-[10px] font-black flex items-center justify-center gap-2"
-          >
-            {isUpdatingProfile ? <Loader2 className="animate-spin" size={12} /> : <CheckCircle2 size={12} />}
-            {isUpdatingProfile ? "ENREGISTREMENT..." : "Mettre à jour le profil"}
-          </NeonButton>
-        </div>
-      </form>
-
-      {/* FORMULAIRE SÉCURITÉ */}
-      <form onSubmit={handleUpdatePassword} className="space-y-4 bg-white/[0.02] border border-white/5 p-6 rounded-3xl">
-        <h4 className="text-xs font-black uppercase tracking-widest text-primary mb-4 flex items-center gap-2">
-          <Lock size={14} /> Sécurité & Mot de passe
-        </h4>
-
-        <div className="space-y-1.5">
-          <label className="text-[9px] uppercase font-black text-white/40 tracking-wider">Nouveau mot de passe</label>
+      <div className="pt-2 border-t border-white/10 space-y-2.5">
+        <span className="text-[9px] uppercase font-black text-amber-400 tracking-widest block">
+          Sécurité (Modifier le mot de passe)
+        </span>
+        
+        <div>
+          <label className="text-[8.5px] uppercase font-bold text-white/60 tracking-wider block mb-0.5">
+            Nouveau Mot de Passe (optionnel)
+          </label>
           <div className="relative">
-            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30" size={14} />
+            <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
             <input
-              required
               type="password"
-              placeholder="Saisir nouveau mot de passe"
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-xs text-white focus:outline-none focus:border-primary"
+              placeholder="••••••••"
+              className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-9 pr-3 text-[11px] text-white focus:outline-none focus:border-primary"
             />
           </div>
-          
-          {/* Encart visuel des critères requis (AJOUTÉ) */}
-          <div className="mt-3 ml-1 space-y-1 text-[8px] uppercase font-black text-white/40 tracking-wider">
-            <span className="text-primary font-black block mb-1">Critères de sécurité requis :</span>
-            <ul className="list-disc pl-3.5 space-y-1">
-              <li>Au moins 6 caractères</li>
-              <li>Au moins une lettre majuscule (A-Z)</li>
-              <li>Au moins une lettre minuscule (a-z)</li>
-              <li>Au moins un chiffre (0-9)</li>
-              <li>Au moins un caractère spécial (ex: @, $, !, %)</li>
-            </ul>
+        </div>
+
+        {newPassword && (
+          <div>
+            <label className="text-[8.5px] uppercase font-bold text-white/60 tracking-wider block mb-0.5">
+              Confirmer le Mot de Passe
+            </label>
+            <div className="relative">
+              <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-white/5 border border-white/10 rounded-lg py-2 pl-9 pr-3 text-[11px] text-white focus:outline-none focus:border-primary"
+              />
+            </div>
           </div>
-        </div>
+        )}
+      </div>
 
-        <div className="pt-2">
-          <NeonButton
-            type="submit"
-            variant="violet"
-            disabled={isUpdatingPassword}
-            className="w-full py-3 text-[10px] font-black flex items-center justify-center gap-2"
-          >
-            {isUpdatingPassword ? <Loader2 className="animate-spin" size={12} /> : <Lock size={12} />}
-            {isUpdatingPassword ? "MODIFICATION..." : "Changer de mot de passe"}
-          </NeonButton>
-        </div>
-      </form>
-
-    </div>
-  )
+      <div className="pt-3">
+        <NeonButton variant="cyan" size="sm" disabled={loading} className="w-full py-2.5 text-[11px] font-mono font-black">
+          {loading ? "Sauvegarde..." : "Enregistrer les modifications"}
+        </NeonButton>
+      </div>
+    </form>
+  );
 }

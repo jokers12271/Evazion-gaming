@@ -3,6 +3,7 @@ import { useLoyalty } from '@/hooks/useLoyalty'
 import { getRank, RANKS } from '@/lib/ranks'
 import { NeonButton } from '@/components/ui/NeonButton'
 import { Trophy, ShieldAlert, Sparkles, X } from 'lucide-react'
+import { RankPerkList } from '@/components/home/RankPerks'
 import { cn } from '@blinkdotnew/ui'
 
 export function RankChangePopup() {
@@ -113,10 +114,9 @@ export function RankChangePopup() {
             </span>
             
             {isLevelUp ? (
-              <p 
-                className="text-sm font-bold italic leading-relaxed text-white" 
-                dangerouslySetInnerHTML={{ __html: `"${newRank.reward}"` }} 
-              />
+              <div className="text-left mt-1">
+                <RankPerkList rank={newRank} size="sm" />
+              </div>
             ) : (
               <p className="text-sm font-bold italic leading-relaxed text-white/70">
                 "Désolé, vous êtes redescendu au rang <span className="font-black" style={{ color: newRank.color }}>{newRank.name}</span>. Vous avez perdu vos privilèges précédents. Vous récupérerez ces avantages dès que vous atteindrez à nouveau ce rang."

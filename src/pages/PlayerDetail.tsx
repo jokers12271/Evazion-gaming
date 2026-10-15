@@ -2,25 +2,27 @@ import { useParams, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { NeonButton } from '@/components/ui/NeonButton'
-import { User, Clock, ChevronLeft, Loader2, Zap, CheckCircle2 } from 'lucide-react'
+import { CyberCard } from '@/components/ui/CyberCard'
+import { User, Clock, ChevronLeft, Loader2, Zap, CheckCircle2, ShieldAlert } from 'lucide-react'
 import { getRank } from '@/lib/ranks'
 import { cn } from '@blinkdotnew/ui'
 import { toast } from 'react-hot-toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useReservations } from '@/hooks/useReservations'
 import { useUserMetadata, useToggleBanPlayer } from '@/hooks/useUserMetadata'
-import { usePrivileges } from '@/hooks/usePrivileges' // AJOUTÉ ICI
+import { usePrivileges } from '@/hooks/usePrivileges'
 import { AdminOnboardingModal, AdminOnboardingStep } from '@/components/ui/AdminOnboardingModal'
-import { ShieldAlert } from 'lucide-react'
+import { useStationsStatus, STATIONS } from '@/hooks/useStationsStatus'
 
 export function PlayerDetail() {
   const { playerId } = useParams({ from: '/dashboard/player/$playerId' })
   const navigate = useNavigate()
   const { createReservation } = useReservations()
-  const { checkWeeklyBonusUsed } = usePrivileges() // HOOK 1 : Déclaré au tout début
+  const { checkWeeklyBonusUsed } = usePrivileges()
   const { data: adminMetadata } = useUserMetadata()
   const toggleBanPlayer = useToggleBanPlayer()
+  const { confirm, dialog: confirmDialog } = useConfirm()
 
-  // HOOK 2 : Chargement du joueur (Déclaré au tout début)
   const { data: player, isLoading } = useQuery({
     queryKey: ['player', playerId],
     queryFn: async () => {
@@ -34,7 +36,6 @@ export function PlayerDetail() {
     }
   })
 
-  // Calculs préparatoires sécurisés (tolèrent le chargement asynchrone)
   const loyalty = player ? (Array.isArray(player.loyalty_points) ? player.loyalty_points[0] : player.loyalty_points) : null;
   const rank = getRank(loyalty?.total_hours || 0)
 
@@ -42,15 +43,14 @@ export function PlayerDetail() {
     rank.name === 'Novice' || rank.name === 'Amateur' ? 15 : 
     rank.name === 'Semi-Pro' ? 30 : 0
 
-  // HOOK 3 : Vérification du bonus hebdomadaire (Déclaré en haut, désactivé tant que player est indéfini)
   const hasUsedWeeklyBonusQuery = checkWeeklyBonusUsed(theoreticalBonus, playerId)
   const hasAlreadyUsedWeeklyBonus = hasUsedWeeklyBonusQuery.data || false
 
-  // RETOURS ANTICIPÉS : Placées après tous les hooks pour respecter les règles de React
+  const { data: occupiedStations } = useStationsStatus()
+
   if (isLoading) return <div className="pt-40 flex justify-center bg-background min-h-screen"><Loader2 className="animate-spin text-primary" size={40} /></div>
   if (!player) return <div className="pt-40 text-center text-white bg-background min-h-screen">Joueur introuvable</div>
 
-  // Détermination du bonus applicable pour la session live
   let privilegeMinutesBonus = 0
   let privilegeAppliedLabel = ''
 
@@ -65,10 +65,8 @@ export function PlayerDetail() {
       privilegeAppliedLabel = `🎁 Bonus 1ère session hebdo Semi-Pro : +30 min offertes à ajouter !`
     }
   } else if (rank.name === 'Pro') {
-    if (60 >= 60) { // S'appliquera si la saisie fait 1h minimum
-      privilegeMinutesBonus = 15
-      privilegeAppliedLabel = `🎁 Bonus Permanent Pro : +15 min offertes sur sessions d'une heure ou plus !`
-    }
+    privilegeMinutesBonus = 15
+    privilegeAppliedLabel = `🎁 Bonus Permanent Pro : +15 min offertes sur sessions d'une heure ou plus !`
   } else if (rank.name === 'Elite') {
     privilegeMinutesBonus = 30
     privilegeAppliedLabel = `🎁 Bonus Permanent Elite : +30 min offertes sur sessions d'une heure 30 min ou plus !`
@@ -84,51 +82,24 @@ export function PlayerDetail() {
   }
 
   const handleQuickStart = async () => {
-    const station = window.prompt("Numéro de station ? (Ex: PS5_1)")
+    const stationRaw = window.prompt("Numéro de station ? (Ex: PS5_1)")
     const minutes = window.prompt("Durée en minutes ? (Ex: 60)")
-    
-    if (station && minutes) {
-      const baseMinutes = parseInt(minutes)
-      let evaluatedBonus = 0;
-      let label = '';
 
-      // ÉVALUATION STRICTE DES CRITÈRES DE DURÉE DE SESSION
-      if (rank.name === 'Novice' || rank.name === 'Amateur') {
-        if (!hasAlreadyUsedWeeklyBonus) {
-          evaluatedBonus = 15;
-          label = 'Bonus de Première session hebdomadaire Novice/Amateur';
-        }
-      } else if (rank.name === 'Semi-Pro') {
-        if (!hasAlreadyUsedWeeklyBonus) {
-          evaluatedBonus = 30;
-          label = 'Bonus de Première session hebdomadaire Semi-Pro';
-        }
-      } else if (rank.name === 'Pro') {
-        if (baseMinutes >= 60) {
-          evaluatedBonus = 15;
-          label = 'Bonus Permanent Pro';
-        }
-      } else if (rank.name === 'Elite') {
-        if (baseMinutes >= 90) {
-          evaluatedBonus = 30;
-          label = 'Bonus Permanent Elite';
-        }
-      } else if (rank.name === 'Légende') {
-        if (baseMinutes >= 90) {
-          evaluatedBonus = 30;
-          label = 'Bonus Permanent Légende';
-        }
-      } else if (rank.name === 'Iconique') {
-        if (baseMinutes >= 120) {
-          evaluatedBonus = 60;
-          label = 'Bonus Permanent Iconique';
-        }
-      } else if (rank.name === 'Divin') {
-        if (baseMinutes === 300) {
-          evaluatedBonus = 60;
-          label = 'Bonus Permanent Divin';
-        }
+    const stationDigits = stationRaw?.match(/\d+/)?.[0]
+    const station = stationDigits ? `PS5_${stationDigits}` : null
+
+    if (station && minutes) {
+      const baseMinutes = parseInt(minutes, 10)
+      if (!Number.isFinite(baseMinutes) || baseMinutes <= 0) {
+        return toast.error("Durée invalide.")
       }
+      if (!STATIONS.includes(station)) {
+        return toast.error(`Station inconnue : ${station}.`)
+      }
+      if (occupiedStations?.includes(station)) {
+        return toast.error(`La ${station} est déjà occupée.`, { position: "bottom-center" })
+      }
+      let evaluatedBonus = privilegeMinutesBonus;
 
       const finalDuration = baseMinutes + evaluatedBonus
       const start = new Date().toISOString()
@@ -144,13 +115,6 @@ export function PlayerDetail() {
           user_id: playerId,
           bonus_minutes_applied: evaluatedBonus
         })
-
-        if (evaluatedBonus > 0) {
-          await supabase.from('notifications').insert([{
-            user_id: playerId,
-            message: `Félicitations ! Vos +${evaluatedBonus} min de privilège de Rang (${label}) ont été automatiquement ajoutées à votre session sur ${station}.`
-          }])
-        }
 
         toast.success(`Session de ${baseMinutes}min + ${evaluatedBonus}min de bonus créée sur ${station}. Activez-la sur le Dashboard !`)
         navigate({ to: '/dashboard' })
@@ -178,12 +142,18 @@ export function PlayerDetail() {
   return (
     <div className="pt-24 md:pt-40 pb-16 md:pb-24 min-h-screen bg-background text-white">
       {isAdminUser && <AdminOnboardingModal pageKey="player_detail" steps={adminOnboardingSteps} />}
+      {confirmDialog}
       <div className="container mx-auto px-4 max-w-2xl">
-        <button onClick={() => navigate({ to: '/dashboard' })} className="flex items-center gap-2 text-muted-foreground mb-8 hover:text-white transition-colors uppercase text-[10px] font-black tracking-widest">
+        <button onClick={() => navigate({ to: '/dashboard' })} className="flex items-center gap-2 text-muted-foreground mb-8 hover:text-white transition-colors uppercase text-[10px] font-black tracking-widest cursor-pointer">
           <ChevronLeft size={16} /> Retour Dashboard
         </button>
 
-        <div className={cn("glass p-10 rounded-[3rem] border-t-[12px] shadow-2xl animate-fade-in", rank.border)}>
+        <CyberCard
+          accentColor={rank.color}
+          hoverEffect={false}
+          cornerAccents={false}
+          className="p-10 border-t-[12px] border-t-cyber-accent animate-fade-in"
+        >
           <div className="flex flex-col items-center text-center mb-10">
             <div className={cn("w-32 h-32 rounded-[2rem] flex items-center justify-center mb-6 shadow-2xl overflow-hidden border-2", rank.border)}>
               {player.avatar_url ? <img src={player.avatar_url} className="w-full h-full object-cover" alt="p" /> : <User size={64} className={rank.label} />}
@@ -201,16 +171,16 @@ export function PlayerDetail() {
           </div>
 
           <div className="grid grid-cols-2 gap-6 mb-12">
-            <div className="glass bg-white/5 p-6 rounded-3xl text-center border border-white/5">
+            <CyberCard accentColor="var(--secondary)" hoverEffect={false} cornerAccents={false} className="p-6 text-center">
               <p className="text-[10px] uppercase font-black text-white/40 mb-2 tracking-widest">Solde</p>
               <div className="text-3xl font-display font-black text-secondary flex items-center justify-center gap-2">
-                {loyalty?.points || 0} <img src="/mani.jpg" className="w-6 h-6 rounded-full" alt="M" />
+                {loyalty?.points || 0} 🪙
               </div>
-            </div>
-            <div className="glass bg-white/5 p-6 rounded-3xl text-center border border-white/5">
+            </CyberCard>
+            <CyberCard hoverEffect={false} cornerAccents={false} className="p-6 text-center">
               <p className="text-[10px] uppercase font-black text-white/40 mb-2 tracking-widest">Temps</p>
               <div className="text-3xl font-display font-black text-white">{loyalty?.total_hours || 0} H</div>
-            </div>
+            </CyberCard>
           </div>
 
           <div className="space-y-4">
@@ -229,16 +199,24 @@ export function PlayerDetail() {
                 variant={player.is_banned ? "ghost" : "orange"}
                 className="w-full py-4 text-xs font-black tracking-widest shadow-lg shadow-red-500/10"
                 style={player.is_banned ? { borderColor: '#ef4444', color: '#ef4444' } : {}}
-                onClick={async () => {
-                  if (confirm(player.is_banned ? `Réactiver et débannir le compte de @${player.display_name} ?` : `Bannir définitivement @${player.display_name} du Sanctuary pour non-respect du règlement ?`)) {
-                    try {
-                      await toggleBanPlayer.mutateAsync({ userId: player.user_id, isBanned: !player.is_banned });
-                      toast.success(player.is_banned ? "Joueur débanni avec succès !" : "Joueur banni du Sanctuary !");
-                      navigate({ to: '/dashboard' });
-                    } catch (err) {
-                      toast.error("Échec de l'opération de modération");
+                onClick={() => {
+                  confirm({
+                    title: player.is_banned ? 'Reactiver le compte' : 'Bannir le joueur',
+                    subject: `@${player.display_name}`,
+                    message: player.is_banned
+                      ? 'Le joueur retrouvera acces a toutes les fonctions du Sanctuary.'
+                      : 'Le joueur perdra immediatement l\'acces au Sanctuary.',
+                    isPending: toggleBanPlayer.isPending,
+                    onConfirm: async () => {
+                      try {
+                        await toggleBanPlayer.mutateAsync({ userId: player.user_id, isBanned: !player.is_banned });
+                        toast.success(player.is_banned ? "Joueur débanni avec succès !" : "Joueur banni du Sanctuary !");
+                        navigate({ to: '/dashboard' });
+                      } catch (err) {
+                        toast.error("Échec de l'opération de modération");
+                      }
                     }
-                  }
+                  });
                 }}
               >
                 {player.is_banned ? "RÉACTIVER LE COMPTE (DÉBANNIR)" : "BANNIR LE JOUEUR DU SANCTUARY"}
@@ -246,7 +224,7 @@ export function PlayerDetail() {
             </div>
           )}
 
-        </div>
+        </CyberCard>
       </div>
     </div>
   )

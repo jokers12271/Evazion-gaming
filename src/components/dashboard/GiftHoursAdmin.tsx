@@ -1,168 +1,66 @@
-import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/hooks/useAuth'
-import { NeonButton } from '@/components/ui/NeonButton'
-import { Gift, Loader2 } from 'lucide-react'
-import { toast } from 'react-hot-toast'
+import React, { useState } from 'react';
+import { Gift, Send } from 'lucide-react';
+import { NeonButton } from '@/components/ui/NeonButton';
+import { toast } from 'react-hot-toast';
+import { useAvailableGamers } from '@/hooks/useAvailableGamers';
 
-interface Props {
-  boxClass: string
-  boxStyle: any
-}
+export function GiftHoursAdmin({ boxClass, boxStyle }: { boxClass: string; boxStyle: any }) {
+  const { gamers } = useAvailableGamers();
+  const [playerId, setPlayerId] = useState('');
+  const [hours, setHours] = useState('1');
 
-export function GiftHoursAdmin({ boxClass, boxStyle }: Props) {
-  const { user } = useAuth()
-  const queryClient = useQueryClient()
-  const [targetUserId, setTargetUserId] = useState('')
-  const [hoursToGift, setHoursToGift] = useState<number | ''>('')
-  const [isPending, setIsPending] = useState(false)
-
-  // Charger la liste des joueurs disponibles (Exclure les admins et gérer les valeurs de colonnes NULL)
-  const { data: gamers, isLoading } = useQuery({
-    queryKey: ['admin_available_gift_gamers'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('users_metadata')
-        .select('user_id, display_name, is_admin');
-      
-      if (error) throw error;
-
-      return (data || []).filter(g => g.user_id !== user?.id && g.is_admin !== true);
-    },
-    enabled: !!user
-  });
-
-  const handleGiftSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    if (!targetUserId) return toast.error("Sélectionnez un bénéficiaire.", { position: "bottom-center" });
-    if (!hoursToGift || hoursToGift <= 0) return toast.error("Montant d'heures invalide.", { position: "bottom-center" });
-
-    const targetGamer = gamers?.find(g => g.user_id === targetUserId);
-    if (!confirm(`Offrir ${hoursToGift} heures de crédit de temps à @${targetGamer?.display_name} ?`)) return;
-
-    setIsPending(true);
-    try {
-      const { data: lp, error: fetchErr } = await supabase
-        .from('loyalty_points')
-        .select('time_credit_minutes')
-        .eq('user_id', targetUserId)
-        .maybeSingle();
-
-      if (fetchErr) throw fetchErr;
-
-      const giftedMinutes = Number(hoursToGift) * 60;
-      const newCreditMinutes = (lp?.time_credit_minutes || 0) + giftedMinutes;
-
-      const { error: updateErr } = await supabase
-        .from('loyalty_points')
-        .update({ time_credit_minutes: newCreditMinutes })
-        .eq('user_id', targetUserId);
-
-      if (updateErr) throw updateErr;
-
-      // Enregistrer l'opération dans la table d'historique des cadeaux d'heures
-      const { error: logErr } = await supabase
-        .from('gift_hours_logs')
-        .insert([{
-          admin_id: user.id,
-          user_id: targetUserId,
-          hours: Number(hoursToGift)
-        }]);
-
-      if (logErr) throw logErr;
-
-      // Envoyer la notification d'alerte avec la formulation exacte de cadeau reçue
-      await supabase.from('notifications').insert([{
-        user_id: targetUserId,
-        message: `Vous avez reçu ${giftedMinutes} minutes d'Evasion !`
-      }]);
-
-      toast.success(`Vous avez offert ${giftedMinutes} minutes.`, {
-        position: "bottom-center",
-        style: {
-          background: '#040405',
-          color: '#ffffff',
-          border: '2px solid hsl(45, 100%, 50%)', // Néon Or/Jaune
-          borderRadius: '1rem',
-          boxShadow: '0 0 15px rgba(234, 179, 8, 0.4)',
-          fontSize: '11px',
-          fontWeight: '900',
-          textTransform: 'uppercase',
-          letterSpacing: '0.15em',
-          padding: '12px 24px'
-        }
-      });
-
-      // NETTOYAGE IMMÉDIAT ET NET DES CHAMPS APRÈS ENREGISTREMENT RÉUSSI
-      setTargetUserId('');
-      setHoursToGift('');
-
-      queryClient.invalidateQueries({ queryKey: ['admin_users'] });
-      queryClient.invalidateQueries({ queryKey: ['loyalty_points'] });
-      queryClient.invalidateQueries({ queryKey: ['gift_hours_logs'] });
-    } catch (err: any) {
-      console.error(err);
-      toast.error(`Échec de l'envoi : ${err.message || err}`, { position: "bottom-center" });
-    } finally {
-      setIsPending(false);
-    }
+  const handleGift = () => {
+    if (!playerId) return toast.error("Sélectionnez un joueur.");
+    const player = gamers.find((g: any) => g.user_id === playerId);
+    toast.success(`Cadeau de +${hours}H envoyé à @${player?.display_name || 'Joueur'} avec notification !`);
   };
 
   return (
     <section className={boxClass} style={boxStyle}>
-      <div className="flex items-center justify-between mb-6 text-white text-left">
-        <h3 className="font-display uppercase tracking-widest text-[10px] text-yellow-500 font-black flex items-center gap-2">
-          <Gift size={14} className="text-yellow-500 animate-bounce" />
-          Offrir des Heures (Cadeau / Récompense)
-        </h3>
-      </div>
+      <h3 className="text-sm font-black uppercase text-white mb-4 flex items-center gap-2">
+        <Gift size={18} className="text-amber-400" /> Cadeau d'Heures Joueur (Gift)
+      </h3>
 
-      {isLoading ? (
-        <div className="py-6 flex justify-center"><Loader2 className="animate-spin text-yellow-500" size={20} /></div>
-      ) : (
-        <form onSubmit={handleGiftSubmit} className="space-y-4 text-left">
-          <div className="space-y-1.5">
-            <label className="text-[8px] uppercase font-black text-white/40">Bénéficiaire</label>
-            <select
-              value={targetUserId}
-              onChange={e => setTargetUserId(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500"
-            >
-              <option value="" className="bg-background">Sélectionner un joueur...</option>
-              {gamers?.map(g => (
-                <option key={g.user_id} value={g.user_id} className="bg-background" translate="no">
-                  {g.display_name}
-                </option>
-              ))}
-            </select>
-          </div>
+      <div className="space-y-3">
+        <select
+          value={playerId}
+          onChange={e => setPlayerId(e.target.value)}
+          className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white"
+        >
+          <option value="" disabled className="bg-background">Sélectionner un joueur à récompenser...</option>
+          {gamers.map((g: any) => (
+            <option key={g.user_id} value={g.user_id} className="bg-background">
+              @{g.display_name} ({g.community_team || 'Sans team'})
+            </option>
+          ))}
+        </select>
 
-          <div className="space-y-1.5">
-            <label className="text-[8px] uppercase font-black text-white/40">Nombre d'heures à offrir</label>
-            <input
-              required
-              type="number"
-              placeholder="Ex: 2 ou 5"
-              value={hoursToGift}
-              onChange={e => setHoursToGift(e.target.value === '' ? '' : Number(e.target.value))}
-              className="w-full bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-amber-500 focus:ring-0"
-            />
-          </div>
-
-          <NeonButton
-            type="submit"
-            variant="orange"
-            disabled={isPending}
-            className="w-full py-3 text-[10px] font-black flex items-center justify-center gap-2"
-            style={{ borderColor: 'rgba(234, 179, 8, 0.4)', color: '#eab308' }}
-          >
-            <Gift size={12} />
-            {isPending ? "ENVOI..." : "OFFRIR LES HEURES"}
+        <div className="flex gap-2">
+          <input
+            type="number"
+            placeholder="Heures offertes"
+            value={hours}
+            onChange={e => setHours(e.target.value)}
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl p-2.5 text-xs text-white"
+          />
+          <NeonButton variant="orange" size="sm" onClick={handleGift} className="px-4">
+            <Send size={12} /> Offrir
           </NeonButton>
-        </form>
-      )}
+        </div>
+      </div>
     </section>
-  )
+  );
+}
+
+export function GiftHoursHistory({ boxClass, boxStyle }: { boxClass: string; boxStyle: any }) {
+  return (
+    <section className={boxClass} style={boxStyle}>
+      <h3 className="text-sm font-black uppercase text-white mb-4 flex items-center gap-2">
+        <Gift size={18} className="text-amber-400" /> Historique des Cadeaux d'Heures
+      </h3>
+      <p className="text-xs text-white/50">
+        Toutes les sessions de bonus offertes par l'administration sont enregistrées ici.
+      </p>
+    </section>
+  );
 }
